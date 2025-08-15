@@ -24,11 +24,17 @@ export class ConversationService {
   }
 
   async findConversationByCustomer(customerId: string): Promise<Conversation | null> {
-    return await this.conversationModel.findOne({ customerId: customerId }).exec();
+    return await this.conversationModel.findOne({ 
+      customerId: customerId,
+      status: 'active'
+    }).exec();
   }
 
   async findConversationByWhatsappNumber(whatsappNumber: string): Promise<Conversation | null> {
-    return await this.conversationModel.findOne({ whatsappNumber }).exec();
+    return await this.conversationModel.findOne({ 
+      whatsappNumber,
+      status: 'active'
+    }).exec();
   }
 
   async updateConversationStatus(conversationId: string, status: string): Promise<Conversation> {
@@ -98,7 +104,7 @@ export class ConversationService {
 
   async getConversationMessages(conversationId: string, limit = 50, skip = 0): Promise<Message[]> {
     return await this.messageModel
-      .find({ conversationId: new Types.ObjectId(conversationId) })
+      .find({ conversationId: conversationId })
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip(skip)
@@ -111,6 +117,11 @@ export class ConversationService {
       throw new NotFoundException('Conversation not found for this customer');
     }
     
+    // Ensure the conversation is active
+    if (conversation.status !== 'active') {
+      throw new NotFoundException('Conversation is not active');
+    }
+    
     const messages = await this.getConversationMessages((conversation as any)._id.toString());
     
     return { conversation, messages };
@@ -121,6 +132,10 @@ export class ConversationService {
 
     console.log({conversation});
     
+    // Only consider active conversations
+    if (conversation && conversation.status !== 'active') {
+      conversation = null;
+    }
     
     if (!conversation) {
       conversation = await this.createConversation({
@@ -130,6 +145,42 @@ export class ConversationService {
       });
     }
     
+    return conversation;
+  }
+
+  async clearConversation(conversationId: string): Promise<Conversation> {
+    const conversation = await this.conversationModel.findByIdAndUpdate(
+      conversationId,
+      { 
+        status: 'archived',
+        lastMessageAt: new Date()
+      },
+      { new: true }
+    ).exec();
+    
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found');
+    }
+    
+    this.logger.log(`Conversation ${conversationId} cleared and archived`);
+    return conversation;
+  }
+
+  async clearConversationByCustomerId(customerId: string): Promise<Conversation> {
+    const conversation = await this.conversationModel.findOneAndUpdate(
+      { customerId: new Types.ObjectId(customerId) },
+      { 
+        status: 'archived',
+        lastMessageAt: new Date()
+      },
+      { new: true }
+    ).exec();
+    
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found for this customer');
+    }
+    
+    this.logger.log(`Conversation for customer ${customerId} cleared and archived`);
     return conversation;
   }
 

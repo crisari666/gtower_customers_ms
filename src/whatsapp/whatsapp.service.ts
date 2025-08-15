@@ -168,4 +168,26 @@ export class WhatsappService {
       throw error;
     }
   }
+
+  async clearConversation(conversationId: string): Promise<any> {
+    try {
+      const result = await this.conversationService.clearConversation(conversationId);
+      this.logger.log(`Conversation ${conversationId} cleared successfully`);
+      return { success: true, data: result };
+    } catch (error) {
+      this.logger.error('Error clearing conversation:', error);
+      throw error;
+    }
+  }
+
+  async clearConversationByCustomerId(customerId: string): Promise<any> {
+    try {
+      const result = await this.conversationService.clearConversationByCustomerId(customerId);
+      this.logger.log(`Conversation for customer ${customerId} cleared successfully`);
+      return { success: true, data: result };
+    } catch (error) {
+      this.logger.error('Error clearing conversation by customer ID:', error);
+      throw error;
+    }
+  }
 }

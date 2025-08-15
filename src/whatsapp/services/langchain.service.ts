@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { LangChainConfig } from '../config/langchain.config';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class LangChainService {
@@ -37,7 +39,6 @@ export class LangChainService {
     try {
       const selectedModel = this.selectModel(modelType);
 
-      console.log(JSON.stringify({selectedModel, message, conversationHistory, context, modelType}, null, 2));
       
       if (!selectedModel) {
         return this.generateRuleBasedResponse(message);
@@ -84,21 +85,15 @@ export class LangChainService {
   }
 
   private buildSystemPrompt(context?: string): string {
-    let basePrompt = `You are a helpful AI assistant for a business customer service team. 
-Your role is to provide helpful, professional, and accurate responses to customer inquiries.
-
-Guidelines:
-- Always be polite and professional
-- Provide clear and concise answers
-- If you don't know something, say so and offer to connect them with a human agent
-- Keep responses under 200 words unless more detail is specifically requested
-- Use a friendly but professional tone
-- Ask clarifying questions when needed to better assist customers`;
-
+    const promptsPath = path.join(__dirname, '../config/system-prompts.json');
+    const promptsData = JSON.parse(fs.readFileSync(promptsPath, 'utf8'));
+    
+    let basePrompt = promptsData.sales_agent.base;
+    
     if (context) {
-      basePrompt += `\n\nContext: ${context}`;
+      basePrompt = `${basePrompt}\n\nContext: ${context}`;
     }
-
+    
     return basePrompt;
   }
 

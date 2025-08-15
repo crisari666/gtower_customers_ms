@@ -270,4 +270,32 @@ export class WhatsappController {
       throw error;
     }
   }
+
+  @Post('conversation/:conversationId/clear')
+  @HttpCode(HttpStatus.OK)
+  async clearConversation(@Param('conversationId') conversationId: string) {
+    this.logger.log(`Clearing conversation: ${conversationId}`);
+    try {
+      const result = await this.whatsappService.clearConversation(conversationId);
+      this.logger.log('Conversation cleared successfully');
+      return { success: true, data: result };
+    } catch (error) {
+      this.logger.error('Failed to clear conversation', error);
+      throw error;
+    }
+  }
+
+  @Post('conversation/customer/:customerId/clear')
+  @HttpCode(HttpStatus.OK)
+  async clearConversationByCustomerId(@Param('customerId') customerId: string) {
+    this.logger.log(`Clearing conversation for customer: ${customerId}`);
+    try {
+      const result = await this.whatsappService.clearConversationByCustomerId(customerId);
+      this.logger.log('Conversation cleared successfully');
+      return { success: true, data: result };
+    } catch (error) {
+      this.logger.error('Failed to clear conversation by customer ID', error);
+      throw error;
+    }
+  }
 }
