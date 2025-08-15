@@ -2,8 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { LangChainConfig } from '../config/langchain.config';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
-import * as fs from 'fs';
-import * as path from 'path';
+import { ConfigFileUtils } from '../../utils/config-file.utils';
 
 @Injectable()
 export class LangChainService {
@@ -38,6 +37,8 @@ export class LangChainService {
   ): Promise<string> {
     try {
       const selectedModel = this.selectModel(modelType);
+
+      console.log({selectedModel})
 
       
       if (!selectedModel) {
@@ -85,16 +86,25 @@ export class LangChainService {
   }
 
   private buildSystemPrompt(context?: string): string {
-    const promptsPath = path.join(__dirname, '../config/system-prompts.json');
-    const promptsData = JSON.parse(fs.readFileSync(promptsPath, 'utf8'));
+    const defaultPrompt = `You are an intelligent sales agent specializing in selling real estate lots. Your primary objective is to interact with customers to offer and sell parcels of land. Each lot available is 500 square meters, priced at 70,000,000 pesos.`;
     
-    let basePrompt = promptsData.sales_agent.base;
-    
-    if (context) {
-      basePrompt = `${basePrompt}\n\nContext: ${context}`;
+    try {
+      const promptsData = ConfigFileUtils.readConfigFile(
+        '../config/system-prompts.json',
+        'src/whatsapp/config/system-prompts.json'
+      );
+      
+      let basePrompt = promptsData.sales_agent.base;
+      
+      if (context) {
+        basePrompt = `${basePrompt}\n\nContext: ${context}`;
+      }
+      
+      return basePrompt;
+    } catch (error) {
+      this.logger.error('Failed to read system prompts, using default:', error);
+      return defaultPrompt;
     }
-    
-    return basePrompt;
   }
 
   private buildMessageChain(

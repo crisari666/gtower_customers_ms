@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Param, HttpCode, HttpStatus, Logger, Headers, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, HttpCode, HttpStatus, Logger, Headers, Query, ValidationPipe } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 import { ConversationService } from './conversation.service';
 import { AiAgentService } from './ai-agent.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { StartConversationDto } from './dto/start-conversation.dto';
 import { WebhookDto } from './dto/webhook.dto';
+import { StartConversationCartagenaDto } from './dto/start_conversation.dto';
 
 @Controller('whatsapp')
 export class WhatsappController {
@@ -295,6 +296,42 @@ export class WhatsappController {
       return { success: true, data: result };
     } catch (error) {
       this.logger.error('Failed to clear conversation by customer ID', error);
+      throw error;
+    }
+  }
+
+  @Post('send-template/cartagena')
+  async sendTemplateOneDayBefore(@Body(new ValidationPipe()) msgTemplateWsDto: StartConversationCartagenaDto) {
+    try {
+      const response = await this.whatsappService.msgTemplate({
+          to: '573108834323',
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          type: "template",
+          template: {
+            name: 'start_conversation_es',
+            //namespace: '376f13b7_1d81_4dc1_b8f0_a6323a309e51',
+            language: {
+              code: 'es',
+            },
+            components: [
+              {
+                type: 'body',
+                parameters: [
+                  {
+                    type: 'text',
+                    text: msgTemplateWsDto.customerName,
+                    parameter_name: 'customer_name',
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        return response;
+
+    } catch (error) {
+      this.logger.error('Failed to send template', error);
       throw error;
     }
   }

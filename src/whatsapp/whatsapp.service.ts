@@ -9,7 +9,7 @@ import axios, { AxiosResponse } from 'axios';
 const accountProd = "746024655261570";
 const accountTest = "719042704630686";
 
-const pathMessage = `v23.0/${accountTest}/messages`
+const pathMessage = `v23.0/${accountProd}/messages`
 
 const urlBaseWsBusinessFb = "https://graph.facebook.com/";
 
@@ -188,6 +188,24 @@ export class WhatsappService {
     } catch (error) {
       this.logger.error('Error clearing conversation by customer ID:', error);
       throw error;
+    }
+  }
+
+  async msgTemplate(messageTemplate: any):Promise<any> {
+    try {
+      
+      const responseMsg: AxiosResponse = await axios.post(
+        `${urlBaseWsBusinessFb}${pathMessage}`,
+        messageTemplate,
+        {headers: this.headers}
+        )
+      return responseMsg.data;
+    } catch (error) {
+      console.error('Error on WsBusiness.sendTicketMsg');
+      // console.error({error});
+      console.error({error:  JSON.stringify( (error as any).response.data)});
+      throw error
+     
     }
   }
 }

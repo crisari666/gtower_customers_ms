@@ -28,7 +28,7 @@ export class AiAgentService {
       // Get conversation history for context
       const conversationHistory = await this.getConversationHistoryForAI((conversation as any)._id.toString());
 
-      console.log(JSON.stringify({conversationHistory}, null, 2));
+      //console.log(JSON.stringify({conversationHistory}, null, 2));
       
       // Analyze customer sentiment
       const sentiment = await this.langChainService.analyzeCustomerSentiment(
@@ -36,7 +36,7 @@ export class AiAgentService {
         conversationHistory
       );
 
-      console.log(JSON.stringify({sentiment}, null, 2));
+      console.log(JSON.stringify({sentiment, messageContent, conversationHistory}, null, 2));
       
 
       // Generate intelligent response using LangChain
@@ -44,7 +44,7 @@ export class AiAgentService {
         messageContent,
         conversationHistory,
         this.buildCustomerContext(conversation, sentiment),
-        'auto'
+        'openai'
       );
 
       console.log(JSON.stringify({response}, null, 2));
