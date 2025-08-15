@@ -1,6 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CreateWhatsappDto } from './dto/create-whatsapp.dto';
-import { UpdateWhatsappDto } from './dto/update-whatsapp.dto';
 import { StartConversationDto } from './dto/start-conversation.dto';
 import { ConversationService } from './conversation.service';
 import { Customer, CustomerDocument } from '../customers/entities/customer.entity';
@@ -9,8 +7,9 @@ import { Model } from 'mongoose';
 import axios, { AxiosResponse } from 'axios';
 
 const accountProd = "746024655261570";
+const accountTest = "719042704630686";
 
-const pathMessage = `v23.0/${accountProd}/messages`
+const pathMessage = `v23.0/${accountTest}/messages`
 
 const urlBaseWsBusinessFb = "https://graph.facebook.com/";
 
@@ -31,6 +30,8 @@ export class WhatsappService {
   async startConversation(startConversationDto: StartConversationDto): Promise<any> {
     try {
       const customer = await this.customerModel.findById(startConversationDto.customerId).exec();
+      console.log({customer});
+      
       if (!customer) {
         throw new Error('Customer not found');
       }
@@ -45,12 +46,15 @@ export class WhatsappService {
         customer.whatsapp
       );
 
+
       // Send template message
       const response = await this.sendTemplateMessage(
         customer.whatsapp,
         startConversationDto.templateName,
         startConversationDto.languageCode || 'en_US'
       );
+
+      console.log(JSON.stringify(response, null, 2));
 
       // Create message record
       if (response.messages && response.messages[0]) {

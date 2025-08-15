@@ -61,6 +61,6 @@ export class WebhookEntryDto {
 }
 
 export class WebhookDto {
-  object: string;
-  entry: WebhookEntryDto[];
+  object: any;
+  entry: any[];
 }

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConversationService } from './conversation.service';
 import { WhatsappService } from './whatsapp.service';
+import { LangChainService } from './services/langchain.service';
 import { Customer, CustomerDocument } from '../customers/entities/customer.entity';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -12,6 +13,7 @@ export class AiAgentService {
   constructor(
     private readonly conversationService: ConversationService,
     private readonly whatsappService: WhatsappService,
+    private readonly langChainService: LangChainService,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
   ) {}
 
@@ -23,8 +25,29 @@ export class AiAgentService {
         return;
       }
 
-      // Analyze message content and generate appropriate response
-      const response = await this.generateResponse(messageContent, conversation);
+      // Get conversation history for context
+      const conversationHistory = await this.getConversationHistoryForAI((conversation as any)._id.toString());
+
+      console.log(JSON.stringify({conversationHistory}, null, 2));
+      
+      // Analyze customer sentiment
+      const sentiment = await this.langChainService.analyzeCustomerSentiment(
+        messageContent,
+        conversationHistory
+      );
+
+      console.log(JSON.stringify({sentiment}, null, 2));
+      
+
+      // Generate intelligent response using LangChain
+      const response = await this.langChainService.generateResponse(
+        messageContent,
+        conversationHistory,
+        this.buildCustomerContext(conversation, sentiment),
+        'auto'
+      );
+
+      console.log(JSON.stringify({response}, null, 2));
       
       if (response) {
         // Send automated response
@@ -35,42 +58,46 @@ export class AiAgentService {
         );
         
         this.logger.log(`AI response sent to ${whatsappNumber}: ${response}`);
+        this.logger.log(`Customer sentiment: ${sentiment.sentiment} (confidence: ${sentiment.confidence})`);
       }
     } catch (error) {
       this.logger.error('Error processing customer message with AI:', error);
     }
   }
 
-  private async generateResponse(messageContent: string, conversation: any): Promise<string | null> {
-    const lowerMessage = messageContent.toLowerCase();
+  private async getConversationHistoryForAI(conversationId: string): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+    try {
+      const messages = await this.conversationService.getConversationMessages(conversationId, 20, 0);
+      
+      return messages.map(msg => ({
+        role: msg.senderType === 'customer' ? 'user' : 'assistant',
+        content: msg.content
+      }));
+    } catch (error) {
+      this.logger.error('Error getting conversation history for AI:', error);
+      return [];
+    }
+  }
+
+  private buildCustomerContext(conversation: any, sentiment: any): string {
+    let context = `Customer conversation context:`;
     
-    // Simple rule-based responses (can be enhanced with actual AI/ML)
-    if (lowerMessage.includes('hello') || lowerMessage.includes('hi') || lowerMessage.includes('hey')) {
-      return 'Hello! Thank you for reaching out. How can I assist you today?';
+    if (conversation.messageCount > 0) {
+      context += `\n- Total messages: ${conversation.messageCount}`;
     }
     
-    if (lowerMessage.includes('help') || lowerMessage.includes('support')) {
-      return 'I\'m here to help! What specific assistance do you need?';
+    if (conversation.lastMessageFrom) {
+      context += `\n- Last message from: ${conversation.lastMessageFrom}`;
     }
     
-    if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('quote')) {
-      return 'I\'d be happy to help you with pricing information. Could you provide more details about what you\'re looking for?';
+    if (sentiment) {
+      context += `\n- Current sentiment: ${sentiment.sentiment} (confidence: ${sentiment.confidence})`;
+      if (sentiment.reasoning) {
+        context += `\n- Sentiment reasoning: ${sentiment.reasoning}`;
+      }
     }
     
-    if (lowerMessage.includes('schedule') || lowerMessage.includes('appointment') || lowerMessage.includes('booking')) {
-      return 'To schedule an appointment, please let me know your preferred date and time, and I\'ll check our availability.';
-    }
-    
-    if (lowerMessage.includes('thank') || lowerMessage.includes('thanks')) {
-      return 'You\'re welcome! Is there anything else I can help you with?';
-    }
-    
-    if (lowerMessage.includes('bye') || lowerMessage.includes('goodbye')) {
-      return 'Thank you for chatting with us! Have a great day. If you need anything else, feel free to reach out.';
-    }
-    
-    // Default response for unrecognized messages
-    return 'Thank you for your message. I\'m processing your request and will get back to you shortly. If this is urgent, please contact our support team directly.';
+    return context;
   }
 
   async startAutomatedConversation(customerId: string, templateName: string): Promise<any> {
@@ -127,6 +154,51 @@ export class AiAgentService {
     }
   }
 
+  async sendIntelligentFollowUp(customerId: string): Promise<any> {
+    try {
+      const customer = await this.customerModel.findById(customerId).exec();
+      if (!customer) {
+        throw new Error('Customer not found');
+      }
+
+      if (!customer.whatsapp) {
+        throw new Error('Customer does not have WhatsApp number');
+      }
+
+      const conversation = await this.conversationService.findConversationByCustomer(customerId);
+      if (!conversation) {
+        throw new Error('Conversation not found');
+      }
+
+      const conversationHistory = await this.getConversationHistoryForAI((conversation as any)._id.toString());
+      
+      // Generate intelligent follow-up suggestions
+      const suggestions = await this.langChainService.generateFollowUpSuggestions(
+        conversationHistory,
+        `Customer: ${customer.name}, WhatsApp: ${customer.whatsapp}`
+      );
+
+      if (suggestions.length > 0) {
+        const followUpMessage = suggestions[0]; // Use the first suggestion
+        
+        const result = await this.whatsappService.sendTextMessage(
+          customer.whatsapp,
+          followUpMessage,
+          customerId
+        );
+
+        this.logger.log(`Intelligent follow-up sent to customer ${customerId}: ${followUpMessage}`);
+        
+        return { ...result, followUpMessage, allSuggestions: suggestions };
+      }
+
+      return { message: 'No follow-up suggestions generated' };
+    } catch (error) {
+      this.logger.error('Error sending intelligent follow-up:', error);
+      throw error;
+    }
+  }
+
   async getConversationAnalytics(customerId: string): Promise<any> {
     try {
       const conversation = await this.conversationService.findConversationByCustomer(customerId);
@@ -136,6 +208,10 @@ export class AiAgentService {
 
       const messages = await this.conversationService.getConversationMessages((conversation as any)._id.toString());
       
+      // Get AI-generated conversation summary
+      const conversationHistory = await this.getConversationHistoryForAI((conversation as any)._id.toString());
+      const summary = await this.langChainService.generateConversationSummary(conversationHistory);
+      
       const analytics = {
         totalMessages: messages.length,
         customerMessages: messages.filter(m => m.senderType === 'customer').length,
@@ -143,11 +219,63 @@ export class AiAgentService {
         lastMessageAt: conversation.lastMessageAt,
         conversationStatus: conversation.status,
         averageResponseTime: this.calculateAverageResponseTime(messages),
+        aiSummary: summary,
+        modelStatus: this.langChainService.getModelStatus(),
       };
 
       return analytics;
     } catch (error) {
       this.logger.error('Error getting conversation analytics:', error);
+      throw error;
+    }
+  }
+
+  async getEnhancedConversationInsights(customerId: string): Promise<any> {
+    try {
+      const conversation = await this.conversationService.findConversationByCustomer(customerId);
+      if (!conversation) {
+        throw new Error('Conversation not found');
+      }
+
+      const messages = await this.conversationService.getConversationMessages((conversation as any)._id.toString());
+      const conversationHistory = await this.getConversationHistoryForAI((conversation as any)._id.toString());
+      
+      // Analyze overall conversation sentiment
+      const recentMessages = messages
+        .filter(m => m.senderType === 'customer')
+        .slice(-5)
+        .map(m => m.content);
+      
+      let overallSentiment = { sentiment: 'neutral', confidence: 0.5, reasoning: 'No recent messages' };
+      
+      if (recentMessages.length > 0) {
+        const lastMessage = recentMessages[recentMessages.length - 1];
+        overallSentiment = await this.langChainService.analyzeCustomerSentiment(
+          lastMessage,
+          conversationHistory
+        );
+      }
+
+      // Generate follow-up suggestions
+      const followUpSuggestions = await this.langChainService.generateFollowUpSuggestions(
+        conversationHistory,
+        `Customer ID: ${customerId}`
+      );
+
+      const insights = {
+        conversationId: (conversation as any)._id,
+        customerId,
+        messageCount: messages.length,
+        conversationDuration: this.calculateConversationDuration(conversation),
+        overallSentiment,
+        followUpSuggestions,
+        aiModelStatus: this.langChainService.getModelStatus(),
+        conversationSummary: await this.langChainService.generateConversationSummary(conversationHistory),
+      };
+
+      return insights;
+    } catch (error) {
+      this.logger.error('Error getting enhanced conversation insights:', error);
       throw error;
     }
   }
@@ -176,5 +304,27 @@ export class AiAgentService {
     }
 
     return responseCount > 0 ? totalResponseTime / responseCount : null;
+  }
+
+  private calculateConversationDuration(conversation: any): string {
+    if (!conversation.createdAt || !conversation.lastMessageAt) {
+      return 'Unknown';
+    }
+
+    const start = new Date(conversation.createdAt);
+    const end = new Date(conversation.lastMessageAt);
+    const durationMs = end.getTime() - start.getTime();
+    
+    const hours = Math.floor(durationMs / (1000 * 60 * 60));
+    const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  }
+
+  async getModelStatus(): Promise<any> {
+    return this.langChainService.getModelStatus();
   }
 }

@@ -24,7 +24,7 @@ export class ConversationService {
   }
 
   async findConversationByCustomer(customerId: string): Promise<Conversation | null> {
-    return await this.conversationModel.findOne({ customerId: new Types.ObjectId(customerId) }).exec();
+    return await this.conversationModel.findOne({ customerId: customerId }).exec();
   }
 
   async findConversationByWhatsappNumber(whatsappNumber: string): Promise<Conversation | null> {
@@ -48,13 +48,17 @@ export class ConversationService {
   async createMessage(createMessageDto: CreateMessageDto): Promise<Message> {
     const message = new this.messageModel(createMessageDto);
     const savedMessage = await message.save();
-    
+
+    //console.log({savedMessage});
+
     // Update conversation with last message info
     await this.conversationModel.findByIdAndUpdate(
       createMessageDto.conversationId,
       {
         lastMessageAt: new Date(),
-        messageCount: { $inc: 1 },
+        $inc: { 
+          messageCount: 1,
+        },
         lastMessageFrom: createMessageDto.senderType,
       }
     ).exec();
@@ -114,6 +118,9 @@ export class ConversationService {
 
   async findOrCreateConversation(customerId: string, whatsappNumber: string): Promise<Conversation> {
     let conversation = await this.findConversationByCustomer(customerId);
+
+    console.log({conversation});
+    
     
     if (!conversation) {
       conversation = await this.createConversation({
@@ -124,5 +131,42 @@ export class ConversationService {
     }
     
     return conversation;
+  }
+
+  async findAllConversations(
+    limit = 50,
+    skip = 0,
+    status?: string,
+    customerId?: string
+  ): Promise<{ conversations: Conversation[]; total: number }> {
+    const filter: any = {};
+    
+    if (status) {
+      filter.status = status;
+    }
+    
+    if (customerId) {
+      filter.customerId = new Types.ObjectId(customerId);
+    }
+    
+    const [conversations, total] = await Promise.all([
+      this.conversationModel
+        .find(filter)
+        .sort({ lastMessageAt: -1, createdAt: -1 })
+        .limit(limit)
+        .skip(skip)
+        .exec(),
+      this.conversationModel.countDocuments(filter).exec()
+    ]);
+    
+    return { conversations, total };
+  }
+
+  async getLast50Messages(): Promise<Message[]> {
+    return await this.messageModel
+      .find()
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .exec();
   }
 }

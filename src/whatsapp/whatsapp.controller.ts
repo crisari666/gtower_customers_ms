@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, HttpCode, HttpStatus, Logger, Headers, Query } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 import { ConversationService } from './conversation.service';
+import { AiAgentService } from './ai-agent.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { StartConversationDto } from './dto/start-conversation.dto';
 import { WebhookDto } from './dto/webhook.dto';
@@ -12,8 +13,8 @@ export class WhatsappController {
   constructor(
     private readonly whatsappService: WhatsappService,
     private readonly conversationService: ConversationService,
+    private readonly aiAgentService: AiAgentService,
   ) {}
-
 
   @Get('webhook')
   @HttpCode(HttpStatus.OK)
@@ -26,12 +27,10 @@ export class WhatsappController {
   
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
-  async webhookPost(@Body() webhookData: WebhookDto) {
-    this.logger.log('Webhook data received:');
-    this.logger.log(JSON.stringify(webhookData, null, 2));
-    
+  async webhookPost(@Body() webhookData: any,) {
     try {
       await this.processWebhookData(webhookData);
+      
       return { success: true };
     } catch (error) {
       this.logger.error('Error processing webhook:', error);
@@ -40,6 +39,7 @@ export class WhatsappController {
   }
 
   private async processWebhookData(webhookData: WebhookDto): Promise<void> {
+    //console.log(JSON.stringify(webhookData, null, 2));
     if (webhookData.object !== 'whatsapp_business_account') {
       return;
     }
@@ -55,10 +55,14 @@ export class WhatsappController {
 
   private async processMessageChanges(value: any): Promise<void> {
     // Process incoming messages from customers
+
+    console.log(JSON.stringify(value, null, 2));
     if (value.messages && value.messages.length > 0) {
       for (const message of value.messages) {
         if (message.from) { // Customer message
-          await this.processCustomerMessage(message, value.metadata);
+          // Extract customer data from contacts
+          const customerData = this.extractCustomerData(message.from, value.contacts);
+          await this.processCustomerMessage(message, value.metadata, customerData);
         }
       }
     }
@@ -71,7 +75,16 @@ export class WhatsappController {
     }
   }
 
-  private async processCustomerMessage(message: any, metadata: any): Promise<void> {
+  private extractCustomerData(whatsappNumber: string, contacts: any[]): any {
+    if (!contacts || !Array.isArray(contacts) || contacts.length === 0) {
+      return null;
+    }
+    
+    const contact = contacts.find(c => c.wa_id === whatsappNumber);
+    return contact || null;
+  }
+
+  private async processCustomerMessage(message: any, metadata: any, customerData: any): Promise<void> {
     try {
       const whatsappNumber = message.from;
       const conversation = await this.conversationService.findConversationByWhatsappNumber(whatsappNumber);
@@ -91,8 +104,19 @@ export class WhatsappController {
         messageType: message.type || 'text',
         content: message.text?.body || 'Unknown message type',
         status: 'delivered',
-        metadata: { message, metadata },
+        metadata: { message, metadata, customerData },
       });
+
+      // Log customer information if available
+      if (customerData?.profile?.name) {
+        this.logger.log(`Message from customer: ${customerData.profile.name} (${whatsappNumber})`);
+      }
+
+      // Process message with AI agent
+      const messageContent = message.text?.body || '';
+      if (messageContent) {
+        await this.aiAgentService.processCustomerMessage(whatsappNumber, messageContent);
+      }
 
       this.logger.log(`Customer message processed: ${message.id}`);
     } catch (error) {
@@ -142,10 +166,9 @@ export class WhatsappController {
   @Post('start-conversation')
   @HttpCode(HttpStatus.OK)
   async startConversation(@Body() startConversationDto: StartConversationDto) {
-    this.logger.log(`Starting conversation with customer: ${startConversationDto.customerId}`);
+    console.info(`Starting conversation with customer: ${startConversationDto.customerId}`);
     try {
       const result = await this.whatsappService.startConversation(startConversationDto);
-      this.logger.log('Conversation started successfully');
       return result;
     } catch (error) {
       this.logger.error('Failed to start conversation', error);
@@ -173,6 +196,77 @@ export class WhatsappController {
       return { success: true, data: result };
     } catch (error) {
       this.logger.error('Failed to get conversation history', error);
+      throw error;
+    }
+  }
+
+  @Post('ai/intelligent-follow-up/:customerId')
+  @HttpCode(HttpStatus.OK)
+  async sendIntelligentFollowUp(@Param('customerId') customerId: string) {
+    this.logger.log(`Sending intelligent follow-up to customer: ${customerId}`);
+    try {
+      const result = await this.aiAgentService.sendIntelligentFollowUp(customerId);
+      this.logger.log('Intelligent follow-up sent successfully');
+      return { success: true, data: result };
+    } catch (error) {
+      this.logger.error('Failed to send intelligent follow-up', error);
+      throw error;
+    }
+  }
+
+  @Get('ai/analytics/:customerId')
+  async getEnhancedAnalytics(@Param('customerId') customerId: string) {
+    try {
+      const result = await this.aiAgentService.getEnhancedConversationInsights(customerId);
+      return { success: true, data: result };
+    } catch (error) {
+      this.logger.error('Failed to get enhanced analytics', error);
+      throw error;
+    }
+  }
+
+  @Get('ai/model-status')
+  async getModelStatus() {
+    try {
+      const result = await this.aiAgentService.getModelStatus();
+      return { success: true, data: result };
+    } catch (error) {
+      this.logger.error('Failed to get model status', error);
+      throw error;
+    }
+  }
+
+  @Post('ai/process-message')
+  @HttpCode(HttpStatus.OK)
+  async processMessageWithAI(@Body() body: { whatsappNumber: string; message: string }) {
+    this.logger.log(`Processing message with AI for: ${body.whatsappNumber}`);
+    try {
+      await this.aiAgentService.processCustomerMessage(body.whatsappNumber, body.message);
+      return { success: true, message: 'Message processed with AI' };
+    } catch (error) {
+      this.logger.error('Failed to process message with AI', error);
+      throw error;
+    }
+  }
+
+  @Get('conversations')
+  async getConversations() {
+    try {
+      const result = await this.conversationService.findAllConversations();
+      return { success: true, data: result };
+    } catch (error) {
+      this.logger.error('Failed to get conversations', error);
+      throw error;
+    }
+  }
+
+  @Get('messages/last-50')
+  async getLast50Messages() {
+    try {
+      const result = await this.conversationService.getLast50Messages();
+      return { success: true, data: result };
+    } catch (error) {
+      this.logger.error('Failed to get last 50 messages', error);
       throw error;
     }
   }
