@@ -22,6 +22,11 @@ async function bootstrap() {
     forbidNonWhitelisted: true,
   }));
 
+  app.enableCors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  });
+
   // Swagger configuration
   const config = new DocumentBuilder()
     .setTitle('GTower Customers API')

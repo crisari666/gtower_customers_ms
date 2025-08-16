@@ -5,13 +5,13 @@ export type ConversationDocument = Conversation & Document;
 
 @Schema({ timestamps: true })
 export class Conversation {
-  @Prop({ type: Types.ObjectId, ref: 'Customer', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'Customer', required: true, index: true })
   customerId: Types.ObjectId;
 
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, trim: true, index: true })
   whatsappNumber: string;
 
-  @Prop({ trim: true })
+  @Prop({ trim: true, index: true })
   conversationId: string;
 
   @Prop({ default: 'active', enum: ['active', 'closed', 'archived'] })

@@ -1,11 +1,23 @@
-import { Controller, Get, Post, Body, Param, HttpCode, HttpStatus, Logger, Headers, Query, ValidationPipe } from '@nestjs/common';
+import { 
+  Controller, 
+  Get,
+  Post, 
+  Body, 
+  Param,
+  HttpCode, 
+  HttpStatus, 
+  ValidationPipe,
+  Logger,
+  Headers,
+  Query
+} from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
-import { ConversationService } from './conversation.service';
-import { AiAgentService } from './ai-agent.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { StartConversationDto } from './dto/start-conversation.dto';
-import { WebhookDto } from './dto/webhook.dto';
 import { StartConversationCartagenaDto } from './dto/start_conversation.dto';
+import { WebhookDto } from './dto/webhook.dto';
+import { ConversationService } from './conversation.service';
+import { AiAgentService } from './ai-agent.service';
 
 @Controller('whatsapp')
 export class WhatsappController {
@@ -95,6 +107,19 @@ export class WhatsappController {
         return;
       }
 
+      // Extract message content based on message type
+      let messageContent = '';
+      let messageType = message.type || 'text';
+      
+      if (message.type === 'button' && message.button?.payload) {
+        messageContent = message.button.payload;
+        messageType = 'button';
+      } else if (message.text?.body) {
+        messageContent = message.text.body;
+      } else {
+        messageContent = 'Unknown message type';
+      }
+
       // Create message record
       await this.conversationService.createMessage({
         conversationId: (conversation as any)._id.toString(),
@@ -102,8 +127,8 @@ export class WhatsappController {
         whatsappNumber,
         whatsappMessageId: message.id,
         senderType: 'customer',
-        messageType: message.type || 'text',
-        content: message.text?.body || 'Unknown message type',
+        messageType,
+        content: messageContent,
         status: 'delivered',
         metadata: { message, metadata, customerData },
       });
@@ -113,9 +138,8 @@ export class WhatsappController {
         this.logger.log(`Message from customer: ${customerData.profile.name} (${whatsappNumber})`);
       }
 
-      // Process message with AI agent
-      const messageContent = message.text?.body || '';
-      if (messageContent) {
+      // Process message with AI agent if there's content
+      if (messageContent && messageContent !== 'Unknown message type') {
         await this.aiAgentService.processCustomerMessage(whatsappNumber, messageContent);
       }
 
@@ -303,32 +327,34 @@ export class WhatsappController {
   @Post('send-template/cartagena')
   async sendTemplateOneDayBefore(@Body(new ValidationPipe()) msgTemplateWsDto: StartConversationCartagenaDto) {
     try {
+      // For now, use a hardcoded number since this is a specific use case
+      // In the future, you can implement customer lookup if needed
       const response = await this.whatsappService.msgTemplate({
-          to: '573108834323',
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          type: "template",
-          template: {
-            name: 'start_conversation_es',
-            //namespace: '376f13b7_1d81_4dc1_b8f0_a6323a309e51',
-            language: {
-              code: 'es',
-            },
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  {
-                    type: 'text',
-                    text: msgTemplateWsDto.customerName,
-                    parameter_name: 'customer_name',
-                  },
-                ],
-              },
-            ],
+        to: '573108834323',
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        type: "template",
+        template: {
+          name: 'start_conversation_es',
+          language: {
+            code: 'es',
           },
-        });
-        return response;
+          components: [
+            {
+              type: 'body',
+              parameters: [
+                {
+                  type: 'text',
+                  text: msgTemplateWsDto.customerName,
+                  parameter_name: 'customer_name',
+                },
+              ],
+            },
+          ],
+        },
+      });
+      
+      return response;
 
     } catch (error) {
       this.logger.error('Failed to send template', error);

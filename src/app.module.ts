@@ -7,6 +7,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { CustomersModule } from './customers/customers.module';
 import { CallLogsModule } from './call_logs/call_logs.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { ChatsModule } from './chats/chats.module';
 
 
 
@@ -20,6 +21,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     CustomersModule,
     CallLogsModule,
     WhatsappModule,
+    ChatsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

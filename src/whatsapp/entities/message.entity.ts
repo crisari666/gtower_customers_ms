@@ -20,7 +20,7 @@ export class Message {
   @Prop({ required: true, enum: ['agent', 'customer'] })
   senderType: string;
 
-  @Prop({ required: true, enum: ['text', 'template', 'image', 'audio', 'video', 'document'] })
+  @Prop({ required: true, enum: ['text', 'template', 'image', 'audio', 'video', 'document', 'button'] })
   messageType: string;
 
   @Prop({ required: true, trim: true })

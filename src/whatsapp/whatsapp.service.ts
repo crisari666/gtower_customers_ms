@@ -30,7 +30,6 @@ export class WhatsappService {
   async startConversation(startConversationDto: StartConversationDto): Promise<any> {
     try {
       const customer = await this.customerModel.findById(startConversationDto.customerId).exec();
-      console.log({customer});
       
       if (!customer) {
         throw new Error('Customer not found');
@@ -46,15 +45,33 @@ export class WhatsappService {
         customer.whatsapp
       );
 
+      
 
-      // Send template message
-      const response = await this.sendTemplateMessage(
-        customer.whatsapp,
-        startConversationDto.templateName,
-        startConversationDto.languageCode || 'en_US'
-      );
-
-      console.log(JSON.stringify(response, null, 2));
+      // Send template message with customer name parameter
+      const response = await this.msgTemplate({
+        to: customer.whatsapp,
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        type: "template",
+        template: {
+          name: startConversationDto.templateName,
+          language: {
+            code: startConversationDto.languageCode || 'en_US',
+          },
+          components: [
+            {
+              type: 'body',
+              parameters: [
+                {
+                  type: 'text',
+                  text: customer.name,
+                  parameter_name: 'customer_name',
+                },
+              ],
+            },
+          ],
+        },
+      });
 
       // Create message record
       if (response.messages && response.messages[0]) {

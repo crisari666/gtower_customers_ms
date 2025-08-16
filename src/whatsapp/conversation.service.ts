@@ -220,4 +220,10 @@ export class ConversationService {
       .limit(50)
       .exec();
   }
+
+  async getMessageCountByConversation(conversationId: string): Promise<number> {
+    return await this.messageModel
+      .countDocuments({ conversationId })
+      .exec();
+  }
 }
