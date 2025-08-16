@@ -7,6 +7,7 @@ import { Message, MessageDocument } from '../whatsapp/entities/message.entity';
 import { Conversation, ConversationDocument } from '../whatsapp/entities/conversation.entity';
 import { PaginationDto } from '../app/shared/pagination.dto';
 import { ConversationMessagesResponseDto } from '../app/shared/conversation-messages-response.dto';
+import { ConversationListResponseDto } from '../app/shared/conversation-list-response.dto';
 
 @Injectable()
 export class ChatsService {
@@ -45,7 +46,7 @@ export class ChatsService {
     // Get messages with pagination directly from database
     const messages = await this.messageModel
       .find({ conversationId: conversation._id.toString() })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1 } as any)
       .limit(paginationDto.limit)
       .skip(paginationDto.skip)
       .select('content createdAt status messageType senderType')
@@ -58,6 +59,86 @@ export class ChatsService {
 
     return {
       messages: messages,
+      page: paginationDto.page,
+      limit: paginationDto.limit,
+      total,
+      totalPages,
+      hasNextPage,
+      hasPreviousPage,
+    };
+  }
+
+  async getLastConversations(paginationDto: PaginationDto): Promise<ConversationListResponseDto> {
+    // Get total conversation count for pagination
+    const total = await this.conversationModel.countDocuments({ status: 'active' }).exec();
+
+    // Use aggregation pipeline for better performance
+    const conversations = await this.conversationModel.aggregate([
+      // Match active conversations
+      { $match: { status: 'active' } },
+      
+      // Lookup customer information
+      {
+        $lookup: {
+          from: 'customers',
+          let: { customerId: '$customerId' },
+          pipeline: [
+            { $match: { $expr: { $eq: [{$toObjectId: '$$customerId'}, "$_id"] } } },
+            { $project: { name: 1, whatsapp: 1 } }
+          ],
+          as: 'customer'
+        }
+      },
+      
+      // Lookup last message
+      {
+        $lookup: {
+          from: 'messages',
+          let: { chatId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: [ '$$chatId', {$toObjectId: '$conversationId'}] } } },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+            { $project: { content: 1, createdAt: 1 } }
+          ],
+          as: 'lastMessage'
+        }
+      },
+      
+      // Unwind arrays
+      { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$lastMessage', preserveNullAndEmptyArrays: true } },
+      
+      // Sort by last message timestamp
+      { $sort: { lastMessageAt: -1 } },
+      
+      // Pagination
+      { $skip: paginationDto.skip },
+      { $limit: paginationDto.limit },
+      
+      // Project final structure
+      {
+        $project: {
+          conversationId: '$_id',
+          customerId: '$customerId',
+          customerName: { $ifNull: ['$customer.name', 'Unknown'] },
+          customerWhatsapp: '$whatsappNumber',
+          lastMessage: { $ifNull: ['$lastMessage.content', 'No messages'] },
+          lastMessageAt: { $ifNull: ['$lastMessage.createdAt', '$lastMessageAt', new Date()] },
+          lastMessageFrom: '$lastMessageFrom',
+          status: '$status',
+          messageCount: '$messageCount'
+        }
+      }
+    ]);
+
+    // Calculate pagination metadata
+    const totalPages = Math.ceil(total / paginationDto.limit);
+    const hasNextPage = paginationDto.page < totalPages;
+    const hasPreviousPage = paginationDto.page > 1;
+
+    return {
+      conversations,
       page: paginationDto.page,
       limit: paginationDto.limit,
       total,

@@ -5,10 +5,10 @@ export type MessageDocument = Message & Document;
 
 @Schema({ timestamps: true })
 export class Message {
-  @Prop({ type: Types.ObjectId, ref: 'Conversation', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'Conversation', required: true, index: true })
   conversationId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Customer', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'Customer', required: true, index: true })
   customerId: Types.ObjectId;
 
   @Prop({ required: true, trim: true })
