@@ -5,6 +5,7 @@ import { Customer, CustomerDocument } from '../customers/entities/customer.entit
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import axios, { AxiosResponse } from 'axios';
+import { templates } from './config/templates';
 
 const accountProd = "746024655261570";
 const accountTest = "719042704630686";
@@ -75,6 +76,11 @@ export class WhatsappService {
 
       // Create message record
       if (response.messages && response.messages[0]) {
+        // Get the actual template content with parameter substitution
+        const actualContent = this.getTemplateContent(startConversationDto.templateName, {
+          customer_name: customer.name
+        });
+        
         await this.conversationService.createMessage({
           conversationId: (conversation as any)._id.toString(),
           customerId: startConversationDto.customerId,
@@ -82,7 +88,7 @@ export class WhatsappService {
           whatsappMessageId: response.messages[0].id,
           senderType: 'agent',
           messageType: 'template',
-          content: `Template: ${startConversationDto.templateName}`,
+          content: actualContent,
           status: 'pending',
           isTemplate: true,
           templateName: startConversationDto.templateName,
@@ -97,7 +103,16 @@ export class WhatsappService {
     }
   }
 
-  async sendTemplateMessage(to: string, templateName: string, languageCode: string = 'en_US'): Promise<any> {
+  async sendTemplateMessage(
+    to: string, 
+    templateName: string, 
+    languageCode: string = 'en_US',
+    options?: {
+      customerId?: string;
+      parameters?: Record<string, string>;
+      createMessageRecord?: boolean;
+    }
+  ): Promise<any> {
     try {
       const data = {
         "messaging_product": "whatsapp",
@@ -114,6 +129,28 @@ export class WhatsappService {
         data,
         { headers: this.headers }
       );
+      
+      // Create message record if requested
+      if (options?.createMessageRecord && options.customerId && responseMsg.data.messages && responseMsg.data.messages[0]) {
+        const conversation = await this.conversationService.findConversationByWhatsappNumber(to);
+        if (conversation) {
+          const actualContent = this.getTemplateContent(templateName, options.parameters || {});
+          
+          await this.conversationService.createMessage({
+            conversationId: (conversation as any)._id.toString(),
+            customerId: options.customerId,
+            whatsappNumber: to,
+            whatsappMessageId: responseMsg.data.messages[0].id,
+            senderType: 'agent',
+            messageType: 'template',
+            content: actualContent,
+            status: 'pending',
+            isTemplate: true,
+            templateName: templateName,
+            metadata: responseMsg.data,
+          });
+        }
+      }
       
       return responseMsg.data;
     } catch (error) {
@@ -206,6 +243,39 @@ export class WhatsappService {
       this.logger.error('Error clearing conversation by customer ID:', error);
       throw error;
     }
+  }
+
+  /**
+   * Helper method to get template content with parameter substitution
+   */
+  private getTemplateContent(templateName: string, parameters: Record<string, string> = {}): string {
+    const templateContent = templates[templateName as keyof typeof templates];
+    if (!templateContent) {
+      return `Template: ${templateName}`;
+    }
+    
+    let content = templateContent;
+    // Replace template parameters with actual values
+    Object.entries(parameters).forEach(([key, value]) => {
+      const placeholder = `{{${key}}}`;
+      content = content.replace(new RegExp(placeholder, 'g'), value);
+    });
+    
+    return content;
+  }
+
+  /**
+   * Get all available templates
+   */
+  getAvailableTemplates(): Record<string, string> {
+    return templates;
+  }
+
+  /**
+   * Get a specific template by name
+   */
+  getTemplate(templateName: string): string | null {
+    return templates[templateName as keyof typeof templates] || null;
   }
 
   async msgTemplate(messageTemplate: any):Promise<any> {

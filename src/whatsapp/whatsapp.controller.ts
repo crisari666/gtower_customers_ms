@@ -324,6 +324,8 @@ export class WhatsappController {
     }
   }
 
+
+
   @Post('send-template/cartagena')
   async sendTemplateOneDayBefore(@Body(new ValidationPipe()) msgTemplateWsDto: StartConversationCartagenaDto) {
     try {
