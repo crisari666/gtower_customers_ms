@@ -6,11 +6,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import axios, { AxiosResponse } from 'axios';
 import { templates } from './config/templates';
+import { WebSocketService } from '../websocket/websocket.service';
 
 const accountProd = "746024655261570";
-const accountTest = "719042704630686";
+const accountTest = "790847484102390";
 
-const pathMessage = `v23.0/${accountProd}/messages`
+const pathMessage = `v23.0/${accountTest}/messages`
 
 const urlBaseWsBusinessFb = "https://graph.facebook.com/";
 
@@ -26,6 +27,7 @@ export class WhatsappService {
   constructor(
     private readonly conversationService: ConversationService,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    private readonly webSocketService: WebSocketService,
   ) {}
 
   async startConversation(startConversationDto: StartConversationDto): Promise<any> {
@@ -93,6 +95,16 @@ export class WhatsappService {
           isTemplate: true,
           templateName: startConversationDto.templateName,
           metadata: response,
+        });
+
+        // Notify connected WebSocket clients about the new conversation
+        this.webSocketService.broadcastCustomEvent('whatsappConversationStarted', {
+          conversationId: (conversation as any)._id.toString(),
+          customerId: startConversationDto.customerId,
+          customerName: customer.name,
+          whatsappNumber: customer.whatsapp,
+          templateName: startConversationDto.templateName,
+          timestamp: new Date(),
         });
       }
 

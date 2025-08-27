@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Client Example</title>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .message { background-color: #d1ecf1; color: #0c5460; margin: 5px 0; padding: 10px; border-radius: 3px; }
+        .input-group { margin: 10px 0; }
+        input, button { padding: 8px; margin: 5px; }
+        button { background-color: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        .log { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; margin: 10px 0; border-radius: 3px; max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Client Example</h1>
+    
+    <div id="status" class="status disconnected">Disconnected</div>
+    
+    <div class="input-group">
+        <input type="text" id="messageInput" placeholder="Type your message..." />
+        <button onclick="sendMessage()">Send Message</button>
+    </div>
+    
+    <div class="input-group">
+        <input type="text" id="roomInput" placeholder="Room name..." />
+        <button onclick="joinRoom()">Join Room</button>
+        <button onclick="leaveRoom()">Leave Room</button>
+    </div>
+    
+    <div class="input-group">
+        <input type="text" id="roomMessageInput" placeholder="Room message..." />
+        <button onclick="sendRoomMessage()">Send to Room</button>
+    </div>
+    
+    <div class="input-group">
+        <button onclick="getStatus()">Get Status</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+    
+    <h3>Event Log:</h3>
+    <div id="log" class="log"></div>
+
+    <script>
+        // Connect to WebSocket server
+        const socket = io('http://localhost:3000', {
+            transports: ['websocket'],
+            upgrade: false
+        });
+
+        const statusDiv = document.getElementById('status');
+        const logDiv = document.getElementById('log');
+
+        // Connection events
+        socket.on('connect', () => {
+            updateStatus('Connected', true);
+            log('Connected to WebSocket server');
+        });
+
+        socket.on('disconnect', () => {
+            updateStatus('Disconnected', false);
+            log('Disconnected from WebSocket server');
+        });
+
+        socket.on('connected', (data) => {
+            log(`Server welcome: ${data.message} (Client ID: ${data.clientId})`);
+        });
+
+        // Message events
+        socket.on('messageReceived', (data) => {
+            log(`Message received: ${JSON.stringify(data.originalMessage)}`);
+        });
+
+        socket.on('messageBroadcast', (data) => {
+            log(`Message broadcast from ${data.from}: ${JSON.stringify(data.message)}`);
+        });
+
+        // Room events
+        socket.on('roomJoined', (data) => {
+            log(`Joined room: ${data.room}`);
+        });
+
+        socket.on('roomLeft', (data) => {
+            log(`Left room: ${data.room}`);
+        });
+
+        socket.on('roomMessage', (data) => {
+            log(`Room message in ${data.room} from ${data.from}: ${JSON.stringify(data.message)}`);
+        });
+
+        // Client events
+        socket.on('clientJoined', (data) => {
+            log(`New client joined: ${data.clientId}`);
+        });
+
+        socket.on('clientLeft', (data) => {
+            log(`Client left: ${data.clientId}`);
+        });
+
+        // Notification events
+        socket.on('notification', (data) => {
+            log(`Notification [${data.type}]: ${data.title} - ${data.message}`);
+        });
+
+        // Chat events
+        socket.on('chatMessage', (data) => {
+            log(`Chat message from ${data.senderName}: ${data.content}`);
+        });
+
+        // WhatsApp events
+        socket.on('whatsappStatusUpdate', (data) => {
+            log(`WhatsApp status update: ${data.status}`);
+        });
+
+        socket.on('whatsappMessageUpdate', (data) => {
+            log(`WhatsApp message update: ${JSON.stringify(data)}`);
+        });
+
+        socket.on('conversationUpdate', (data) => {
+            log(`Conversation update: ${JSON.stringify(data)}`);
+        });
+
+        // Functions
+        function updateStatus(text, connected) {
+            statusDiv.textContent = text;
+            statusDiv.className = `status ${connected ? 'connected' : 'disconnected'}`;
+        }
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'message';
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = {
+                type: 'text',
+                data: input.value,
+                timestamp: new Date()
+            };
+            
+            socket.emit('message', message);
+            log(`Sent message: ${input.value}`);
+            input.value = '';
+        }
+
+        function joinRoom() {
+            const input = document.getElementById('roomInput');
+            const roomName = input.value.trim();
+            if (roomName) {
+                socket.emit('joinRoom', roomName);
+                log(`Attempting to join room: ${roomName}`);
+            }
+        }
+
+        function leaveRoom() {
+            const input = document.getElementById('roomInput');
+            const roomName = input.value.trim();
+            if (roomName) {
+                socket.emit('leaveRoom', roomName);
+                log(`Attempting to leave room: ${roomName}`);
+            }
+        }
+
+        function sendRoomMessage() {
+            const input = document.getElementById('roomMessageInput');
+            const roomInput = document.getElementById('roomInput');
+            const message = {
+                type: 'text',
+                data: input.value,
+                timestamp: new Date()
+            };
+            
+            const roomData = {
+                room: roomInput.value.trim(),
+                message: message
+            };
+            
+            socket.emit('roomMessage', roomData);
+            log(`Sent room message to ${roomData.room}: ${input.value}`);
+            input.value = '';
+        }
+
+        function getStatus() {
+            fetch('/websocket/status')
+                .then(response => response.json())
+                .then(data => {
+                    log(`WebSocket Status: ${data.connectedClients} clients connected`);
+                })
+                .catch(error => {
+                    log(`Error getting status: ${error.message}`);
+                });
+        }
+
+        function clearLog() {
+            logDiv.innerHTML = '';
+        }
+
+        // Enter key handlers
+        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        document.getElementById('roomInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') joinRoom();
+        });
+
+        document.getElementById('roomMessageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendRoomMessage();
+        });
+    </script>
+</body>
+</html>

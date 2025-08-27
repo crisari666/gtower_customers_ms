@@ -46,7 +46,7 @@ export class ChatsService {
     // Get messages with pagination directly from database
     const messages = await this.messageModel
       .find({ conversationId: conversation._id.toString() })
-      .sort({ createdAt: -1 } as any)
+      .sort({ createdAt: 1 } as any)
       .limit(paginationDto.limit)
       .skip(paginationDto.skip)
       .select('content createdAt status messageType senderType')
