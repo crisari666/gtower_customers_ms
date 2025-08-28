@@ -143,7 +143,7 @@ curl -X POST http://localhost:3000/websocket/notify/client/client123 \
 ```
 
 #### Broadcast to all clients:
-```bash
+```bash/Users/kdev999/devs/voice_agents_ms/gtower_customers/WEBSOCKET_WHATSAPP_IMPLEMENTATION.md
 curl -X POST http://localhost:3000/websocket/notify/broadcast \
   -H "Content-Type: application/json" \
   -d '{

@@ -14,10 +14,10 @@ export class Conversation {
   @Prop({ trim: true, index: true })
   conversationId: string;
 
-  @Prop({ default: 'active', enum: ['active', 'closed', 'archived'] })
+  @Prop({ default: 'active', enum: ['active', 'closed', 'archived'], index: true })
   status: string;
 
-  @Prop({ type: Date })
+  @Prop({ type: Date, index: true })
   lastMessageAt: Date;
 
   @Prop({ type: Number, default: 0 })
@@ -25,6 +25,9 @@ export class Conversation {
 
   @Prop({ type: String, enum: ['agent', 'customer'], default: 'customer' })
   lastMessageFrom: string;
+
+  @Prop({ type: Date })
+  clearedAt: Date;
 }
 
 export const ConversationSchema = SchemaFactory.createForClass(Conversation);

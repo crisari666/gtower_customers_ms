@@ -25,27 +25,30 @@ export class ChatsService {
       throw new NotFoundException(`Customer with ID ${customerId} not found`);
     }
     
-    
-    // Get conversation for this customer
-    const conversation = await this.conversationModel.findOne({ 
-      customerId: customerId,
-      status: 'active'
-    }).exec();
+    // Get conversation for this customer (including archived ones to find the last clear date)
+    const conversation = await this.conversationModel.find({ 
+      customerId: customerId
+    }).sort({ createdAt: -1 }).exec();
+
+    console.log({conversation});
     
     if (!conversation) {
       throw new NotFoundException('No conversation found for this customer');
     }
 
+    // If conversation has a clear date, filter messages after that date
+    // Otherwise, return all messages
+    const messageFilter: any = { conversationId: conversation[0]._id.toString() };
+    if (conversation[0].clearedAt) {
+      messageFilter.createdAt = { $gt: conversation[0].clearedAt };
+    }
+
     // Get total message count for pagination
-    const total = await this.messageModel.countDocuments({ 
-      conversationId: conversation._id.toString()
-    }).exec();
+    const total = await this.messageModel.countDocuments(messageFilter).exec();
 
-
-    
     // Get messages with pagination directly from database
     const messages = await this.messageModel
-      .find({ conversationId: conversation._id.toString() })
+      .find(messageFilter)
       .sort({ createdAt: 1 } as any)
       .limit(paginationDto.limit)
       .skip(paginationDto.skip)
@@ -146,5 +149,19 @@ export class ChatsService {
       hasNextPage,
       hasPreviousPage,
     };
+  }
+
+  async deleteConversation(conversationId: string): Promise<void> {
+    // Verify conversation exists
+    const conversation = await this.conversationModel.findById(conversationId).exec();
+    if (!conversation) {
+      throw new NotFoundException(`Conversation with ID ${conversationId} not found`);
+    }
+
+    // Delete all messages related to this conversation
+    await this.messageModel.deleteMany({ conversationId: conversationId }).exec();
+
+    // Delete the conversation
+    await this.conversationModel.findByIdAndDelete(conversationId).exec();
   }
 }

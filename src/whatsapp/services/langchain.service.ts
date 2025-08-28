@@ -36,11 +36,7 @@ export class LangChainService {
     modelType?: 'openai' | 'auto'
   ): Promise<string> {
     try {
-      const selectedModel = this.selectModel(modelType);
-
-      console.log({selectedModel})
-
-      
+      const selectedModel = this.selectModel(modelType);      
       if (!selectedModel) {
         return this.generateRuleBasedResponse(message);
       }

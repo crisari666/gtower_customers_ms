@@ -171,7 +171,8 @@ export class ConversationService {
       { customerId: customerId },
       { 
         status: 'archived',
-        lastMessageAt: new Date()
+        lastMessageAt: new Date(),
+        clearedAt: new Date()
       },
       { new: true }
     ).exec();

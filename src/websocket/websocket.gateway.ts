@@ -11,6 +11,12 @@ import {
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 
+// WhatsApp WebSocket constants
+export const WHATSAPP_ROOMS = {
+  GENERAL: 'whatsapp:general',
+  CUSTOMER: (customerId: string) => `whatsapp:customer:${customerId}`,
+} as const;
+
 export interface WebSocketMessage {
   type: string;
   data: any;
@@ -23,12 +29,40 @@ export interface ClientInfo {
   metadata?: Record<string, any>;
 }
 
+// WhatsApp message interface based on Message entity
+export interface WhatsAppMessageEvent {
+  conversationId: string;
+  customerId: string;
+  whatsappNumber: string;
+  whatsappMessageId: string;
+  senderType: 'agent' | 'customer';
+  messageType: string;
+  content: string;
+  status: string;
+  sentAt?: Date;
+  deliveredAt?: Date;
+  readAt?: Date;
+  metadata?: Record<string, any>;
+  isTemplate: boolean;
+  templateName: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  timestamp: Date;
+}
+
+export interface WhatsAppWebhookEvent {
+  type: 'verification' | 'message' | 'status';
+  challenge?: string;
+  data: any;
+  timestamp: Date;
+}
+
 @WebSocketGateway({
   cors: {
     origin: process.env.CORS_ORIGIN || '*',
     credentials: true,
   },
-  namespace: '/',
+  namespace: '/websocket',
 })
 export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
@@ -37,7 +71,7 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
   private readonly logger = new Logger(WebSocketGateway.name);
   private readonly connectedClients = new Map<string, ClientInfo>();
 
-  afterInit(server: Server): void {
+  afterInit(): void {
     this.logger.log('WebSocket Gateway initialized');
   }
 
@@ -52,7 +86,13 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
     };
 
     this.connectedClients.set(client.id, clientInfo);
-    this.logger.log(`Client connected: ${client.id}`);
+    this.logger.log(
+      `New WebSocket connection established:
+      - Client ID: ${client.id}
+      - IP Address: ${clientInfo.metadata.ip}
+      - User Agent: ${clientInfo.metadata.userAgent}
+      - Connected At: ${clientInfo.connectedAt.toISOString()}`
+    );
     
     // Send welcome message
     client.emit('connected', {
@@ -144,6 +184,51 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
     });
   }
 
+  // WhatsApp-specific methods
+  @SubscribeMessage('joinWhatsAppGeneral')
+  handleJoinWhatsAppGeneral(@ConnectedSocket() client: Socket): void {
+    const roomName = WHATSAPP_ROOMS.GENERAL;
+    client.join(roomName);
+    this.logger.log(`Client ${client.id} joined WhatsApp general room`);
+    
+    client.emit('whatsappGeneralJoined', {
+      room: roomName,
+      timestamp: new Date(),
+    });
+  }
+
+  @SubscribeMessage('joinWhatsAppCustomer')
+  handleJoinWhatsAppCustomer(
+    @MessageBody() customerId: string,
+    @ConnectedSocket() client: Socket,
+  ): void {
+    const roomName = WHATSAPP_ROOMS.CUSTOMER(customerId);
+    client.join(roomName);
+    this.logger.log(`Client ${client.id} joined WhatsApp customer room: ${customerId}`);
+    
+    client.emit('whatsappCustomerJoined', {
+      room: roomName,
+      customerId,
+      timestamp: new Date(),
+    });
+  }
+
+  @SubscribeMessage('leaveWhatsAppCustomer')
+  handleLeaveWhatsAppCustomer(
+    @MessageBody() customerId: string,
+    @ConnectedSocket() client: Socket,
+  ): void {
+    const roomName = WHATSAPP_ROOMS.CUSTOMER(customerId);
+    client.leave(roomName);
+    this.logger.log(`Client ${client.id} left WhatsApp customer room: ${customerId}`);
+    
+    client.emit('whatsappCustomerLeft', {
+      room: roomName,
+      customerId,
+      timestamp: new Date(),
+    });
+  }
+
   // Public methods for other services to use
   sendToClient(clientId: string, event: string, data: any): void {
     const client = this.server.sockets.sockets.get(clientId);
@@ -162,6 +247,38 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
     this.server.emit(event, data);
   }
 
+  // WhatsApp-specific emission methods
+  emitWhatsAppMessage(message: WhatsAppMessageEvent): void {
+    // Emit to general room
+    this.sendToRoom(WHATSAPP_ROOMS.GENERAL, 'whatsappMessage', message);
+    
+    this.broadcastToAll('whatsappMessage', message);
+    
+    // Emit to specific customer room
+    const customerRoom = WHATSAPP_ROOMS.CUSTOMER(message.customerId);
+    this.sendToRoom(customerRoom, 'whatsappMessage', message);
+    
+    this.logger.log(`WhatsApp message emitted to rooms: general and ${customerRoom}`);
+  }
+
+  emitWhatsAppMessageStatus(messageId: string, status: string, customerId: string): void {
+    const statusUpdate = {
+      messageId,
+      status,
+      customerId,
+      timestamp: new Date(),
+    };
+    
+    // Emit to general room
+    this.sendToRoom(WHATSAPP_ROOMS.GENERAL, 'whatsappMessageStatus', statusUpdate);
+    
+    // Emit to specific customer room
+    const customerRoom = WHATSAPP_ROOMS.CUSTOMER(customerId);
+    this.sendToRoom(customerRoom, 'whatsappMessageStatus', statusUpdate);
+    
+    this.logger.log(`WhatsApp message status update emitted: ${messageId} -> ${status}`);
+  }
+
   getConnectedClients(): ClientInfo[] {
     return Array.from(this.connectedClients.values());
   }
@@ -172,5 +289,10 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
 
   isClientConnected(clientId: string): boolean {
     return this.connectedClients.has(clientId);
+  }
+
+  emitWebhookEvent(event: WhatsAppWebhookEvent): void {
+    this.broadcastToAll('whatsappWebhook', event);
+    this.logger.log(`WhatsApp webhook event emitted: ${event.type}`);
   }
 }

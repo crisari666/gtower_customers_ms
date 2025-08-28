@@ -5,6 +5,7 @@ import { LangChainService } from './services/langchain.service';
 import { Customer, CustomerDocument } from '../customers/entities/customer.entity';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { AppWebSocketGateway } from '../websocket/websocket.gateway';
 
 @Injectable()
 export class AiAgentService {
@@ -14,6 +15,7 @@ export class AiAgentService {
     private readonly conversationService: ConversationService,
     private readonly whatsappService: WhatsappService,
     private readonly langChainService: LangChainService,
+    private readonly webSocketGateway: AppWebSocketGateway,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
   ) {}
 
@@ -47,15 +49,51 @@ export class AiAgentService {
         'openai'
       );
 
-      console.log(JSON.stringify({response}, null, 2));
+      //console.log(JSON.stringify({response}, null, 2));
       
       if (response) {
         // Send automated response
-        await this.whatsappService.sendTextMessage(
+        const whatsappResponse = await this.whatsappService.sendTextMessage(
           whatsappNumber, 
           response, 
           (conversation as any).customerId.toString()
         );
+
+        // After the message is sent and created in the database, emit WebSocket event
+        if (whatsappResponse && whatsappResponse.messages && whatsappResponse.messages[0]) {
+          try {
+                         // Verify that the message was actually created in the database
+             const createdMessage = await this.conversationService.findMessageByWhatsappId(whatsappResponse.messages[0].id);
+             
+             if (createdMessage) {
+               const messageData = {
+                 conversationId: (conversation as any)._id.toString(),
+                 customerId: (conversation as any).customerId.toString(),
+                 whatsappNumber,
+                 whatsappMessageId: whatsappResponse.messages[0].id,
+                 senderType: 'agent' as const,
+                 messageType: 'text',
+                 content: response,
+                 status: 'pending',
+                 metadata: whatsappResponse,
+                 isTemplate: false,
+                 templateName: '',
+                 timestamp: new Date(),
+               };
+
+               // Send WebSocket notification using the gateway's emitWhatsAppMessage method
+               this.webSocketGateway.emitWhatsAppMessage(messageData);
+               this.logger.log(`WebSocket notification sent for AI agent message via gateway`);
+             } else {
+               this.logger.warn(`Message was sent to WhatsApp but not found in database: ${whatsappResponse.messages[0].id}`);
+             }
+          } catch (websocketError) {
+            this.logger.error('Error sending WebSocket notification for AI agent message:', websocketError);
+            // Don't fail the entire operation if WebSocket fails
+          }
+        } else {
+          this.logger.warn('WhatsApp response does not contain message ID, skipping WebSocket notification');
+        }
         
         this.logger.log(`AI response sent to ${whatsappNumber}: ${response}`);
         this.logger.log(`Customer sentiment: ${sentiment.sentiment} (confidence: ${sentiment.confidence})`);

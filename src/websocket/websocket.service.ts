@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AppWebSocketGateway } from './websocket.gateway';
+import { AppWebSocketGateway, WHATSAPP_ROOMS } from './websocket.gateway';
 
 export interface NotificationData {
   type: 'info' | 'success' | 'warning' | 'error';
@@ -30,6 +30,51 @@ export class WebSocketService {
   private readonly logger = new Logger(WebSocketService.name);
 
   constructor(private readonly webSocketGateway: AppWebSocketGateway) {}
+
+  // WhatsApp-specific methods
+  joinWhatsAppGeneral(clientId: string): void {
+    this.logger.log(`Client ${clientId} joining WhatsApp general room`);
+    // The actual room joining is handled by the gateway
+  }
+
+  joinWhatsAppCustomer(clientId: string, customerId: string): void {
+    this.logger.log(`Client ${clientId} joining WhatsApp customer room: ${customerId}`);
+    // The actual room joining is handled by the gateway
+  }
+
+  leaveWhatsAppCustomer(clientId: string, customerId: string): void {
+    this.logger.log(`Client ${clientId} leaving WhatsApp customer room: ${customerId}`);
+    // The actual room leaving is handled by the gateway
+  }
+
+  getWhatsAppRooms(): typeof WHATSAPP_ROOMS {
+    return WHATSAPP_ROOMS;
+  }
+
+  // General WebSocket methods
+  sendToClient(clientId: string, event: string, data: any): void {
+    this.webSocketGateway.sendToClient(clientId, event, data);
+  }
+
+  sendToRoom(roomName: string, event: string, data: any): void {
+    this.webSocketGateway.sendToRoom(roomName, event, data);
+  }
+
+  broadcastToAll(event: string, data: any): void {
+    this.webSocketGateway.broadcastToAll(event, data);
+  }
+
+  getConnectedClients(): ReturnType<typeof this.webSocketGateway.getConnectedClients> {
+    return this.webSocketGateway.getConnectedClients();
+  }
+
+  getConnectedClientsCount(): number {
+    return this.webSocketGateway.getConnectedClientsCount();
+  }
+
+  isClientConnected(clientId: string): boolean {
+    return this.webSocketGateway.isClientConnected(clientId);
+  }
 
   // Client management
   sendNotificationToClient(clientId: string, notification: NotificationData): void {
@@ -124,18 +169,7 @@ export class WebSocketService {
     }
   }
 
-  // Status and monitoring
-  getConnectedClientsCount(): number {
-    return this.webSocketGateway.getConnectedClientsCount();
-  }
-
-  getConnectedClients(): any[] {
-    return this.webSocketGateway.getConnectedClients();
-  }
-
-  isClientConnected(clientId: string): boolean {
-    return this.webSocketGateway.isClientConnected(clientId);
-  }
+  // Status and monitoring methods are already implemented above
 
   // WhatsApp integration helpers
   sendWhatsAppStatusUpdate(clientId: string, status: string, metadata?: any): void {

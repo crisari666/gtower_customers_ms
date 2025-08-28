@@ -18,6 +18,8 @@ import { StartConversationCartagenaDto } from './dto/start_conversation.dto';
 import { WebhookDto } from './dto/webhook.dto';
 import { ConversationService } from './conversation.service';
 import { AiAgentService } from './ai-agent.service';
+import { AppWebSocketGateway, WhatsAppWebhookEvent } from '../websocket/websocket.gateway';
+import { WebSocketService } from '../websocket/websocket.service';
 
 @Controller('whatsapp')
 export class WhatsappController {
@@ -27,6 +29,8 @@ export class WhatsappController {
     private readonly whatsappService: WhatsappService,
     private readonly conversationService: ConversationService,
     private readonly aiAgentService: AiAgentService,
+    private readonly webSocketGateway: AppWebSocketGateway,
+    private readonly webSocketService: WebSocketService,
   ) {}
 
   @Get('webhook')
@@ -35,6 +39,17 @@ export class WhatsappController {
     this.logger.log('Webhook verification received:');
     this.logger.log(JSON.stringify(query, null, 2));
     const challenge = query['hub.challenge'];
+    
+    // Broadcast webhook verification event to all connected clients
+    const webhookEvent: WhatsAppWebhookEvent = {
+      type: 'verification',
+      challenge: challenge,
+      data: query,
+      timestamp: new Date(),
+    };
+    
+    this.webSocketGateway.emitWebhookEvent(webhookEvent);
+    
     return challenge;
   }
   
@@ -138,6 +153,24 @@ export class WhatsappController {
         this.logger.log(`Message from customer: ${customerData.profile.name} (${whatsappNumber})`);
       }
 
+      // Emit WebSocket event for real-time updates with message entity structure
+      const whatsappMessageEvent = {
+        conversationId: (conversation as any)._id.toString(),
+        customerId: (conversation as any).customerId.toString(),
+        whatsappNumber,
+        whatsappMessageId: message.id,
+        senderType: 'customer' as const,
+        messageType,
+        content: messageContent,
+        status: 'delivered',
+        metadata: { message, metadata, customerData },
+        isTemplate: false,
+        templateName: '',
+        timestamp: new Date(),
+      };
+
+      this.webSocketGateway.emitWhatsAppMessage(whatsappMessageEvent);
+
       // Process message with AI agent if there's content
       if (messageContent && messageContent !== 'Unknown message type') {
         await this.aiAgentService.processCustomerMessage(whatsappNumber, messageContent);
@@ -168,6 +201,16 @@ export class WhatsappController {
       }
 
       await this.conversationService.updateMessageStatus(status.id, updateData);
+      
+      // Emit WebSocket event for status updates
+      if (message.customerId) {
+        this.webSocketGateway.emitWhatsAppMessageStatus(
+          status.id,
+          status.status,
+          message.customerId.toString()
+        );
+      }
+      
       this.logger.log(`Message status updated: ${status.id} -> ${status.status}`);
     } catch (error) {
       this.logger.error('Error processing message status:', error);
@@ -296,6 +339,37 @@ export class WhatsappController {
     }
   }
 
+  @Get('messages/chat-list/:customerId')
+  async getChatMessages(@Param('customerId') customerId: string) {
+    try {
+      const result = await this.conversationService.getConversationHistory(customerId);
+      
+      // Transform messages to match the message entity structure
+      const formattedMessages = result.messages.map(message => ({
+        conversationId: message.conversationId.toString(),
+        customerId: message.customerId.toString(),
+        whatsappNumber: message.whatsappNumber,
+        whatsappMessageId: message.whatsappMessageId,
+        senderType: message.senderType,
+        messageType: message.messageType,
+        content: message.content,
+        status: message.status,
+        sentAt: message.sentAt,
+        deliveredAt: message.deliveredAt,
+        readAt: message.readAt,
+        metadata: message.metadata,
+        isTemplate: message.isTemplate,
+        templateName: message.templateName || '',
+        timestamp: new Date()
+      }));
+      
+      return { success: true, data: formattedMessages };
+    } catch (error) {
+      this.logger.error('Failed to get chat messages', error);
+      throw error;
+    }
+  }
+
   @Post('conversation/:conversationId/clear')
   @HttpCode(HttpStatus.OK)
   async clearConversation(@Param('conversationId') conversationId: string) {
@@ -323,8 +397,6 @@ export class WhatsappController {
       throw error;
     }
   }
-
-
 
   @Post('send-template/cartagena')
   async sendTemplateOneDayBefore(@Body(new ValidationPipe()) msgTemplateWsDto: StartConversationCartagenaDto) {
