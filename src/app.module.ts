@@ -10,6 +10,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { ChatsModule } from './chats/chats.module';
 import { WebSocketModule } from './websocket/websocket.module';
 import { SentimentModule } from './sentiment/sentiment.module';
+import { ProspectModule } from './prospect/prospect.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { SentimentModule } from './sentiment/sentiment.module';
     ChatsModule,
     WebSocketModule,
     SentimentModule,
+    ProspectModule,
   ],
   controllers: [AppController],
   providers: [AppService],
