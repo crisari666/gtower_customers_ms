@@ -77,8 +77,7 @@ export class AiAgentService {
         messageContent,
         conversationHistory,
         this.buildCustomerContext(conversation, sentiment),
-        'openai',
-        (conversation as any).customerId.toString()
+        'openai'
       );
 
       console.log(JSON.stringify({response}, null, 2));
@@ -86,7 +85,7 @@ export class AiAgentService {
       if (response) {
         // Check if the response contains a function call
         if (response.functionCall) {
-          console.info('functionCall', response.functionCall, "conversation", (conversation as any));
+          //console.info('functionCall', response.functionCall, "conversation", (conversation as any));
           await this.executeFunctionCall(response.functionCall, (conversation as any).customerId.toString());
         }
 
@@ -133,7 +132,7 @@ export class AiAgentService {
           this.logger.warn('WhatsApp response does not contain message ID, skipping WebSocket notification');
         }
         
-        this.logger.log(`AI response sent to ${whatsappNumber}: ${response.customerMessage || response}`);
+        ///this.logger.log(`AI response sent to ${whatsappNumber}: ${response.customerMessage || response}`);
         this.logger.log(`Customer sentiment: ${sentiment.sentiment} (confidence: ${sentiment.confidence})`);
       }
     } catch (error) {
@@ -143,6 +142,7 @@ export class AiAgentService {
 
   private async executeFunctionCall(functionCall: any, customerId: string): Promise<void> {
     try {
+      console.log('Execute function call', {functionCall, customerId});
       if (functionCall.function === 'markCustomerAsProspect') {
         const { prospectSource, additionalNotes } = functionCall.parameters || {};
         

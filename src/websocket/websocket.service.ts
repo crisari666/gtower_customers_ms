@@ -139,7 +139,7 @@ export class WebSocketService {
         ...data,
         timestamp: new Date(),
       });
-      this.logger.log(`Custom event '${eventName}' sent to client ${clientId}`);
+      //this.logger.log(`Custom event '${eventName}' sent to client ${clientId}`);
     } catch (error) {
       this.logger.error(`Failed to send custom event '${eventName}' to client ${clientId}:`, error);
     }
@@ -151,7 +151,7 @@ export class WebSocketService {
         ...data,
         timestamp: new Date(),
       });
-      this.logger.log(`Custom event '${eventName}' sent to room ${roomName}`);
+      //this.logger.log(`Custom event '${eventName}' sent to room ${roomName}`);
     } catch (error) {
       this.logger.error(`Failed to send custom event '${eventName}' to room ${roomName}:`, error);
     }

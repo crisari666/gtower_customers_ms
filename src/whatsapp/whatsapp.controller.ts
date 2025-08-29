@@ -84,7 +84,7 @@ export class WhatsappController {
   private async processMessageChanges(value: any): Promise<void> {
     // Process incoming messages from customers
 
-    console.log(JSON.stringify(value, null, 2));
+    //console.log(JSON.stringify(value, null, 2));
     if (value.messages && value.messages.length > 0) {
       for (const message of value.messages) {
         if (message.from) { // Customer message

@@ -4,6 +4,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 import { ConfigFileUtils } from '../../utils/config-file.utils';
 import { CustomerSentimentService } from '../../sentiment/services/customer-sentiment.service';
+import { SentimentAnalysisResult } from '../types/sentiment-analysis.types';
 
 @Injectable()
 export class LangChainService {
@@ -33,38 +34,12 @@ export class LangChainService {
     }
   }
 
-  async generateResponse(
-    message: string,
-    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
-    context?: string,
-    modelType?: 'openai' | 'auto'
-  ): Promise<string> {
-    try {
-      const selectedModel = this.selectModel(modelType);      
-      if (!selectedModel) {
-        return this.generateRuleBasedResponse(message);
-      }
-
-      const response = await this.generateAIModelResponse(
-        message,
-        conversationHistory,
-        context,
-        selectedModel
-      );
-
-      return response;
-    } catch (error) {
-      this.logger.error('Error generating AI response:', error);
-      return this.generateRuleBasedResponse(message);
-    }
-  }
 
   async generateResponseWithFunctionCalling(
     message: string,
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
     context?: string,
-    modelType?: 'openai' | 'auto',
-    customerId?: string
+    modelType?: 'openai' | 'auto'
   ): Promise<{ customerMessage: string; functionCall?: any }> {
     try {
       const selectedModel = this.selectModel(modelType);      
@@ -78,7 +53,6 @@ export class LangChainService {
         conversationHistory,
         context,
         selectedModel,
-        customerId
       );
 
       return response;
@@ -119,16 +93,15 @@ export class LangChainService {
     message: string,
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
     context: string | undefined,
-    model: ChatOpenAI,
-    customerId?: string
+    model: ChatOpenAI
   ): Promise<{ customerMessage: string; functionCall?: any }> {
-    const systemPrompt = this.buildSystemPromptWithFunctionCalling(context, customerId);
+    const systemPrompt = this.buildSystemPromptWithFunctionCalling(context);
     const messages = this.buildMessageChain(systemPrompt, conversationHistory, message);
 
     const response = await model.invoke(messages);
     const content = response.content as string;
 
-    
+    console.log('Handle function call', {content});
     // Parse the response to check for function calls
     const functionCall = this.parseFunctionCallFromResponse(content);
     
@@ -136,7 +109,7 @@ export class LangChainService {
     const customerMessage = this.extractCustomerMessage(content);
     
     return {
-      customerMessage,
+      customerMessage: customerMessage.replace(/```json/g, '').replace(/```/g, '').trim(),
       functionCall
     };
   }
@@ -163,62 +136,8 @@ export class LangChainService {
     }
   }
 
-  private buildSystemPromptWithFunctionCalling(context?: string, customerId?: string): string {
-    const defaultPrompt = `You are an intelligent sales agent specializing in selling real estate lots in Cartagena de Indias, Colombia. Customers interact with you after receiving WhatsApp templates that already contain the project details. Do not repeat or restate template information unless the customer explicitly asks. Your primary goal is to spark curiosity, build trust, and determine if the customer wants to be contacted by a real human agent.
-
-# Conversation Flow
-
-1. The customer first clicks a button in WhatsApp ("Recibir más información"). You continue the engagement naturally in their language, focusing on lifestyle, benefits, and curiosity (not repeating raw lot details).
-2. The customer receives a second template with full project information and two buttons: to accept or decline contact by a human advisor.
-3. If the customer selects or expresses interest in being contacted (explicitly or implicitly), you must:
-   - Respond to the **customer** with a natural confirmation message (e.g., '¡Perfecto! Un asesor se pondrá en contacto contigo muy pronto.').
-   - Use the function call \`markCustomerAsProspect\` to update their status in the system.
-   - End the interaction after sending both (customer message + function call).
-4. If the customer declines or shows no interest, politely thank them, close the conversation, and do not produce function calls.
-
-# Key Behaviors
-
-- Always reply in the same language as the customer.
-- Use a warm, confident, and persuasive tone to generate curiosity and trust.
-- Ask open-ended, guiding questions to understand needs (e.g., '¿Lo busca como inversión o como casa de descanso?').
-- Never fabricate details, prices, or promotions—only reference the database or what was in the template.
-- Only call functions when customer explicitly confirms interest.
-
-# Function Calling Rules
-
-- When customer shows clear interest in being contacted:
-  1. Send customer-facing confirmation message
-  2. Call \`markCustomerAsProspect\` function with customer details
-- If not interested: only send the polite closing message, no function calls.
-
-# Available Functions
-
-## markCustomerAsProspect
-Marks a customer as a prospect when they agree to be contacted by a human agent.
-
-**Parameters:**
-- customerId: string (required) - The customer's unique identifier
-- prospectSource: string (optional) - Source of the prospect (e.g., 'whatsapp_template', 'ai_conversation')
-- additionalNotes: string (optional) - Any additional context about the customer's interest
-
-**Example:**
-\`\`\`json
-{
-  "function": "markCustomerAsProspect",
-  "parameters": {
-    "customerId": "${customerId || '[CUSTOMER_ID]'}",
-    "prospectSource": "whatsapp_ai_conversation",
-    "additionalNotes": "Customer showed interest in 500m2 lots, prefers Spanish language"
-  }
-}
-\`\`\`
-
-# Notes
-
-- Your purpose is not to sell fully, but to validate interest and enable the handoff.
-- Customers who clicked 'Recibir más información' are warm leads—your job is to keep them engaged until they confirm or decline contact.
-- If not interested: politely close with gratitude, no function calls.
-- If interested: send customer confirmation, then call the appropriate function.`;
+  private buildSystemPromptWithFunctionCalling(context?: string): string {
+    const defaultPrompt = ``;
     
     try {
       const promptsData = ConfigFileUtils.readConfigFile(
@@ -227,6 +146,8 @@ Marks a customer as a prospect when they agree to be contacted by a human agent.
       );
       
       let basePrompt = promptsData.sales_agent.base;
+
+      console.log('Base prompt', basePrompt);
       
       if (context) {
         basePrompt = `${basePrompt}\n\nContext: ${context}`;
@@ -312,7 +233,7 @@ Marks a customer as a prospect when they agree to be contacted by a human agent.
 
   private extractCustomerMessage(content: string): string {
     // Remove function call JSON from the customer message
-    const cleanMessage = content.replace(/\{[\s\S]*"function"[\s\S]*\}/, '').trim().replace(/```json/g, '').replace(/```/g, '');
+    const cleanMessage = content.replace(/\{[\s\S]*"function"[\s\S]*\}/, '').trim()
     return cleanMessage || 'Thank you for your interest. A human agent will contact you soon.';
   }
 
@@ -347,30 +268,7 @@ Marks a customer as a prospect when they agree to be contacted by a human agent.
   async analyzeCustomerSentiment(
     message: string,
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
-  ): Promise<{
-    sentiment: 'positive' | 'negative' | 'neutral';
-    confidence: number;
-    reasoning: string;
-    leadQualification: {
-      urgency: 'high' | 'medium' | 'low';
-      buyingIntent: 'strong' | 'moderate' | 'weak' | 'none';
-      budgetIndication: 'high' | 'medium' | 'low' | 'unknown';
-      decisionMaker: boolean;
-      timeline: 'immediate' | 'short_term' | 'long_term' | 'unknown';
-      painPoints: string[];
-      objections: string[];
-      positiveSignals: string[];
-      riskFactors: string[];
-      nextBestAction: string;
-    };
-    customerProfile: {
-      expertise: 'beginner' | 'intermediate' | 'expert';
-      industry: string;
-      companySize: 'startup' | 'small' | 'medium' | 'large' | 'enterprise' | 'unknown';
-      role: string;
-      communicationStyle: 'formal' | 'casual' | 'technical' | 'business';
-    };
-  }> {
+  ): Promise<SentimentAnalysisResult> {
     try {
       if (!this.openaiModel) {
         return this.getDefaultResponse();
@@ -417,7 +315,11 @@ Focus on sales-relevant indicators, buying signals, and actionable insights for 
       const content = response.content as string;
       
       try {
-        const parsed = JSON.parse(content);
+        let parsed = JSON.parse(content);
+        if(parsed['LEAD QUALIFICATION']) parsed = parsed['LEAD QUALIFICATION'];
+
+        console.log('Parsed response snetimend', {parsed});
+
         return {
           sentiment: parsed.sentiment || 'neutral',
           confidence: parsed.confidence || 0.5,
@@ -459,31 +361,7 @@ Focus on sales-relevant indicators, buying signals, and actionable insights for 
     message: string,
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
     conversationContext?: Record<string, any>
-  ): Promise<{
-    sentiment: 'positive' | 'negative' | 'neutral';
-    confidence: number;
-    reasoning: string;
-    leadQualification: {
-      urgency: 'high' | 'medium' | 'low';
-      buyingIntent: 'strong' | 'moderate' | 'weak' | 'none';
-      budgetIndication: 'high' | 'medium' | 'low' | 'unknown';
-      decisionMaker: boolean;
-      timeline: 'immediate' | 'short_term' | 'long_term' | 'unknown';
-      painPoints: string[];
-      objections: string[];
-      positiveSignals: string[];
-      riskFactors: string[];
-      nextBestAction: string;
-    };
-    customerProfile: {
-      expertise: 'beginner' | 'intermediate' | 'expert';
-      industry: string;
-      companySize: 'startup' | 'small' | 'medium' | 'large' | 'enterprise' | 'unknown';
-      role: string;
-      communicationStyle: 'formal' | 'casual' | 'technical' | 'business';
-    };
-    saved: boolean;
-  }> {
+  ): Promise<SentimentAnalysisResult & { saved: boolean }> {
     try {
       // Analyze sentiment
       const analysisResult = await this.analyzeCustomerSentiment(message, conversationHistory);
@@ -546,17 +424,17 @@ Focus on sales-relevant indicators, buying signals, and actionable insights for 
     }
   }
 
-  private getDefaultResponse() {
+  private getDefaultResponse(): SentimentAnalysisResult {
     return {
-      sentiment: 'neutral' as const,
+      sentiment: 'neutral',
       confidence: 0.5,
       reasoning: 'Analysis unavailable',
       leadQualification: {
-        urgency: 'low' as const,
-        buyingIntent: 'none' as const,
-        budgetIndication: 'unknown' as const,
+        urgency: 'low',
+        buyingIntent: 'none',
+        budgetIndication: 'unknown',
         decisionMaker: false,
-        timeline: 'unknown' as const,
+        timeline: 'unknown',
         painPoints: [],
         objections: [],
         positiveSignals: [],
@@ -564,11 +442,11 @@ Focus on sales-relevant indicators, buying signals, and actionable insights for 
         nextBestAction: 'Continue conversation to gather more information'
       },
       customerProfile: {
-        expertise: 'beginner' as const,
+        expertise: 'beginner',
         industry: 'unknown',
-        companySize: 'unknown' as const,
+        companySize: 'unknown',
         role: 'unknown',
-        communicationStyle: 'casual' as const
+        communicationStyle: 'casual'
       }
     };
   }
