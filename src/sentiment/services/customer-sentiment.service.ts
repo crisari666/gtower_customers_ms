@@ -83,6 +83,7 @@ export class CustomerSentimentService {
         .sort({ createdAt: -1 })
         .skip(offset)
         .limit(limit)
+        .select('sentiment confidence')
         .exec();
     } catch (error) {
       this.logger.error(`Error retrieving sentiment history for customer ${customerId}:`, error);

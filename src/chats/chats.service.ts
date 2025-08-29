@@ -29,8 +29,6 @@ export class ChatsService {
     const conversation = await this.conversationModel.find({ 
       customerId: customerId
     }).sort({ createdAt: -1 }).exec();
-
-    console.log({conversation});
     
     if (!conversation) {
       throw new NotFoundException('No conversation found for this customer');

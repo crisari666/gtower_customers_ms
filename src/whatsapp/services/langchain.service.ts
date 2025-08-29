@@ -267,16 +267,20 @@ export class LangChainService {
 
   async analyzeCustomerSentiment(
     message: string,
-    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
-  ): Promise<SentimentAnalysisResult> {
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+    customerId?: string,
+    conversationId?: string,
+    messageIndex?: number,
+    conversationContext?: Record<string, any>
+  ): Promise<SentimentAnalysisResult & { saved: boolean }> {
     try {
       if (!this.openaiModel) {
-        return this.getDefaultResponse();
+        return { ...this.getDefaultResponse(), saved: false };
       }
 
       const model = this.selectModel();
       if (!model) {
-        return this.getDefaultResponse();
+        return { ...this.getDefaultResponse(), saved: false };
       }
 
       const comprehensivePrompt = `Analyze this customer interaction for comprehensive lead qualification and sales intelligence.
@@ -318,9 +322,9 @@ Focus on sales-relevant indicators, buying signals, and actionable insights for 
         let parsed = JSON.parse(content);
         if(parsed['LEAD QUALIFICATION']) parsed = parsed['LEAD QUALIFICATION'];
 
-        console.log('Parsed response snetimend', {parsed});
+        console.log('Parsed response sentiment', {parsed});
 
-        return {
+        const analysisResult = {
           sentiment: parsed.sentiment || 'neutral',
           confidence: parsed.confidence || 0.5,
           reasoning: parsed.reasoning || 'Analysis completed',
@@ -344,85 +348,74 @@ Focus on sales-relevant indicators, buying signals, and actionable insights for 
             communicationStyle: parsed.customerProfile?.communicationStyle || 'casual'
           }
         };
-      } catch (parseError) {
-        this.logger.warn('Failed to parse comprehensive lead analysis response:', parseError);
-        return this.getDefaultResponse();
-      }
-    } catch (error) {
-      this.logger.error('Error analyzing customer sentiment and lead qualification:', error);
-      return this.getDefaultResponse();
-    }
-  }
 
-  async analyzeAndSaveCustomerSentiment(
-    customerId: string,
-    conversationId: string,
-    messageIndex: number,
-    message: string,
-    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
-    conversationContext?: Record<string, any>
-  ): Promise<SentimentAnalysisResult & { saved: boolean }> {
-    try {
-      // Analyze sentiment
-      const analysisResult = await this.analyzeCustomerSentiment(message, conversationHistory);
-      
-      // Transform the data to match the DTO structure
-      const sentimentData = {
-        sentiment: analysisResult.sentiment,
-        confidence: analysisResult.confidence,
-        reasoning: analysisResult.reasoning,
-        urgency: analysisResult.leadQualification.urgency,
-        buyingIntent: analysisResult.leadQualification.buyingIntent,
-        budgetIndication: analysisResult.leadQualification.budgetIndication,
-        decisionMaker: analysisResult.leadQualification.decisionMaker,
-        timeline: analysisResult.leadQualification.timeline,
-        painPoints: analysisResult.leadQualification.painPoints,
-        objections: analysisResult.leadQualification.objections,
-        positiveSignals: analysisResult.leadQualification.positiveSignals,
-        riskFactors: analysisResult.leadQualification.riskFactors,
-        nextBestAction: analysisResult.leadQualification.nextBestAction,
-        expertise: analysisResult.customerProfile.expertise,
-        industry: analysisResult.customerProfile.industry,
-        companySize: analysisResult.customerProfile.companySize,
-        role: analysisResult.customerProfile.role,
-        communicationStyle: analysisResult.customerProfile.communicationStyle
-      };
+        // Save to database if all required parameters are provided
+        if (customerId && conversationId && messageIndex !== undefined) {
+          try {
+            const sentimentData = {
+              sentiment: analysisResult.sentiment,
+              confidence: analysisResult.confidence,
+              reasoning: analysisResult.reasoning,
+              urgency: analysisResult.leadQualification.urgency,
+              buyingIntent: analysisResult.leadQualification.buyingIntent,
+              budgetIndication: analysisResult.leadQualification.budgetIndication,
+              decisionMaker: analysisResult.leadQualification.decisionMaker,
+              timeline: analysisResult.leadQualification.timeline,
+              painPoints: analysisResult.leadQualification.painPoints,
+              objections: analysisResult.leadQualification.objections,
+              positiveSignals: analysisResult.leadQualification.positiveSignals,
+              riskFactors: analysisResult.leadQualification.riskFactors,
+              nextBestAction: analysisResult.leadQualification.nextBestAction,
+              expertise: analysisResult.customerProfile.expertise,
+              industry: analysisResult.customerProfile.industry,
+              companySize: analysisResult.customerProfile.companySize,
+              role: analysisResult.customerProfile.role,
+              communicationStyle: analysisResult.customerProfile.communicationStyle
+            };
 
-      // Save to database
-      try {
-        await this.customerSentimentService.saveSentimentAnalysis(
-          customerId,
-          conversationId,
-          messageIndex,
-          message,
-          sentimentData,
-          conversationContext
-        );
-        
-        this.logger.log(`Sentiment analysis saved for customer ${customerId}, conversation ${conversationId}`);
-        
-        return {
-          ...analysisResult,
-          saved: true
-        };
-      } catch (saveError) {
-        this.logger.error(`Error saving sentiment analysis for customer ${customerId}:`, saveError);
-        
+            console.log('Sentiment data', {sentimentData});
+
+            await this.customerSentimentService.saveSentimentAnalysis(
+              customerId,
+              conversationId,
+              messageIndex,
+              message,
+              sentimentData,
+              conversationContext
+            );
+            
+            this.logger.log(`Sentiment analysis saved for customer ${customerId}, conversation ${conversationId}`);
+            
+            return {
+              ...analysisResult,
+              saved: true
+            };
+          } catch (saveError) {
+            this.logger.error(`Error saving sentiment analysis for customer ${customerId}:`, saveError);
+            
+            return {
+              ...analysisResult,
+              saved: false
+            };
+          }
+        }
+
+        // Return analysis result without saving if parameters are missing
         return {
           ...analysisResult,
           saved: false
         };
+      } catch (parseError) {
+        this.logger.warn('Failed to parse comprehensive lead analysis response:', parseError);
+        return { ...this.getDefaultResponse(), saved: false };
       }
     } catch (error) {
-      this.logger.error(`Error in analyzeAndSaveCustomerSentiment for customer ${customerId}:`, error);
-      
-      const defaultResult = this.getDefaultResponse();
-      return {
-        ...defaultResult,
-        saved: false
-      };
+      this.logger.error('Error analyzing customer sentiment and lead qualification:', error);
+      return { ...this.getDefaultResponse(), saved: false };
     }
   }
+
+
 
   private getDefaultResponse(): SentimentAnalysisResult {
     return {

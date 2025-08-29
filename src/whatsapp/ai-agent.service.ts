@@ -5,7 +5,7 @@ import { LangChainService } from './services/langchain.service';
 import { Customer, CustomerDocument } from '../customers/entities/customer.entity';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { AppWebSocketGateway, CustomerProspectStatusEvent } from '../websocket/websocket.gateway';
+import { AppWebSocketGateway } from '../websocket/websocket.gateway';
 import { CustomersService } from '../customers/customers.service';
 
 @Injectable()
@@ -44,10 +44,14 @@ export class AiAgentService {
         'riviera_information_es'
       );
 
-      // Analyze customer sentiment
+      // Analyze customer sentiment and save to database
       const sentiment = await this.langChainService.analyzeCustomerSentiment(
         messageContent,
-        conversationHistory
+        conversationHistory,
+        (conversation as any).customerId.toString(),
+        (conversation as any)._id.toString(),
+        messageCount,
+        { whatsappNumber, messageType: 'customer' }
       );
 
       // console.log(JSON.stringify({sentiment, messageContent, conversationHistory}, null, 2));
