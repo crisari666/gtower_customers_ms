@@ -12,6 +12,7 @@ import { LangChainService } from './services/langchain.service';
 import { LangChainConfig } from './config/langchain.config';
 import { WebSocketModule } from '../websocket/websocket.module';
 import { SentimentModule } from '../sentiment/sentiment.module';
+import { CustomersService } from 'src/customers/customers.service';
 
 @Module({
   imports: [
@@ -30,7 +31,8 @@ import { SentimentModule } from '../sentiment/sentiment.module';
     ConversationService, 
     AiAgentService, 
     LangChainService,
-    LangChainConfig
+    LangChainConfig,
+    CustomersService
   ],
   exports: [WhatsappService, ConversationService, AiAgentService, LangChainService],
 })

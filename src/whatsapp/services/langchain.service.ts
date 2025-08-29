@@ -59,6 +59,36 @@ export class LangChainService {
     }
   }
 
+  async generateResponseWithFunctionCalling(
+    message: string,
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+    context?: string,
+    modelType?: 'openai' | 'auto',
+    customerId?: string
+  ): Promise<{ customerMessage: string; functionCall?: any }> {
+    try {
+      const selectedModel = this.selectModel(modelType);      
+      if (!selectedModel) {
+        const ruleBasedResponse = this.generateRuleBasedResponse(message);
+        return { customerMessage: ruleBasedResponse };
+      }
+
+      const response = await this.generateAIModelResponseWithFunctionCalling(
+        message,
+        conversationHistory,
+        context,
+        selectedModel,
+        customerId
+      );
+
+      return response;
+    } catch (error) {
+      this.logger.error('Error generating AI response with function calling:', error);
+      const ruleBasedResponse = this.generateRuleBasedResponse(message);
+      return { customerMessage: ruleBasedResponse };
+    }
+  }
+
   private selectModel(modelType?: 'openai' | 'auto'): ChatOpenAI | null {
     if (modelType === 'openai' && this.openaiModel) {
       return this.openaiModel;
@@ -85,8 +115,110 @@ export class LangChainService {
     return response.content as string;
   }
 
+  private async generateAIModelResponseWithFunctionCalling(
+    message: string,
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+    context: string | undefined,
+    model: ChatOpenAI,
+    customerId?: string
+  ): Promise<{ customerMessage: string; functionCall?: any }> {
+    const systemPrompt = this.buildSystemPromptWithFunctionCalling(context, customerId);
+    const messages = this.buildMessageChain(systemPrompt, conversationHistory, message);
+
+    const response = await model.invoke(messages);
+    const content = response.content as string;
+
+    
+    // Parse the response to check for function calls
+    const functionCall = this.parseFunctionCallFromResponse(content);
+    
+    // Extract customer message (remove function call part if present)
+    const customerMessage = this.extractCustomerMessage(content);
+    
+    return {
+      customerMessage,
+      functionCall
+    };
+  }
+
   private buildSystemPrompt(context?: string): string {
     const defaultPrompt = `You are an intelligent sales agent specializing in selling real estate lots. Your primary objective is to interact with customers to offer and sell parcels of land. Each lot available is 500 square meters, priced at 70,000,000 pesos.`;
+    
+    try {
+      const promptsData = ConfigFileUtils.readConfigFile(
+        '../config/system-prompts.json',
+        'src/whatsapp/config/system-prompts.json'
+      );
+      
+      let basePrompt = promptsData.sales_agent.base;
+      
+      if (context) {
+        basePrompt = `${basePrompt}\n\nContext: ${context}`;
+      }
+      
+      return basePrompt;
+    } catch (error) {
+      this.logger.error('Failed to read system prompts, using default:', error);
+      return defaultPrompt;
+    }
+  }
+
+  private buildSystemPromptWithFunctionCalling(context?: string, customerId?: string): string {
+    const defaultPrompt = `You are an intelligent sales agent specializing in selling real estate lots in Cartagena de Indias, Colombia. Customers interact with you after receiving WhatsApp templates that already contain the project details. Do not repeat or restate template information unless the customer explicitly asks. Your primary goal is to spark curiosity, build trust, and determine if the customer wants to be contacted by a real human agent.
+
+# Conversation Flow
+
+1. The customer first clicks a button in WhatsApp ("Recibir más información"). You continue the engagement naturally in their language, focusing on lifestyle, benefits, and curiosity (not repeating raw lot details).
+2. The customer receives a second template with full project information and two buttons: to accept or decline contact by a human advisor.
+3. If the customer selects or expresses interest in being contacted (explicitly or implicitly), you must:
+   - Respond to the **customer** with a natural confirmation message (e.g., '¡Perfecto! Un asesor se pondrá en contacto contigo muy pronto.').
+   - Use the function call \`markCustomerAsProspect\` to update their status in the system.
+   - End the interaction after sending both (customer message + function call).
+4. If the customer declines or shows no interest, politely thank them, close the conversation, and do not produce function calls.
+
+# Key Behaviors
+
+- Always reply in the same language as the customer.
+- Use a warm, confident, and persuasive tone to generate curiosity and trust.
+- Ask open-ended, guiding questions to understand needs (e.g., '¿Lo busca como inversión o como casa de descanso?').
+- Never fabricate details, prices, or promotions—only reference the database or what was in the template.
+- Only call functions when customer explicitly confirms interest.
+
+# Function Calling Rules
+
+- When customer shows clear interest in being contacted:
+  1. Send customer-facing confirmation message
+  2. Call \`markCustomerAsProspect\` function with customer details
+- If not interested: only send the polite closing message, no function calls.
+
+# Available Functions
+
+## markCustomerAsProspect
+Marks a customer as a prospect when they agree to be contacted by a human agent.
+
+**Parameters:**
+- customerId: string (required) - The customer's unique identifier
+- prospectSource: string (optional) - Source of the prospect (e.g., 'whatsapp_template', 'ai_conversation')
+- additionalNotes: string (optional) - Any additional context about the customer's interest
+
+**Example:**
+\`\`\`json
+{
+  "function": "markCustomerAsProspect",
+  "parameters": {
+    "customerId": "${customerId || '[CUSTOMER_ID]'}",
+    "prospectSource": "whatsapp_ai_conversation",
+    "additionalNotes": "Customer showed interest in 500m2 lots, prefers Spanish language"
+  }
+}
+\`\`\`
+
+# Notes
+
+- Your purpose is not to sell fully, but to validate interest and enable the handoff.
+- Customers who clicked 'Recibir más información' are warm leads—your job is to keep them engaged until they confirm or decline contact.
+- If not interested: politely close with gratitude, no function calls.
+- If interested: send customer confirmation, then call the appropriate function.`;
     
     try {
       const promptsData = ConfigFileUtils.readConfigFile(
@@ -159,6 +291,29 @@ export class LangChainService {
     }
     
     return 'Thank you for your message. I\'m processing your request and will get back to you shortly. If this is urgent, please contact our support team directly.';
+  }
+
+  private parseFunctionCallFromResponse(content: string): any | undefined {
+    try {
+      // Look for JSON function call in the response
+      const jsonMatch = content.match(/\{[\s\S]*"function"[\s\S]*\}/);
+      if (jsonMatch) {
+        const functionCall = JSON.parse(jsonMatch[0]);
+        if (functionCall.function && functionCall.parameters) {
+          return functionCall;
+        }
+      }
+      return undefined;
+    } catch (error) {
+      this.logger.warn('Failed to parse function call from response:', error);
+      return undefined;
+    }
+  }
+
+  private extractCustomerMessage(content: string): string {
+    // Remove function call JSON from the customer message
+    const cleanMessage = content.replace(/\{[\s\S]*"function"[\s\S]*\}/, '').trim().replace(/```json/g, '').replace(/```/g, '');
+    return cleanMessage || 'Thank you for your interest. A human agent will contact you soon.';
   }
 
   async generateConversationSummary(

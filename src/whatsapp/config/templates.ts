@@ -6,7 +6,7 @@ Hola {{customer_name}}!
 
 Tenemos lotes en una ubicación privilegiada, cerca de playas de arena blanca y mar turquesa. Solo para pocos.`,
 
-  'riviera_information_es': `
+  'riviera_information_contact_es': `
 🌴✨ RIVERA BEACH CARTAGENA – Tu paraíso frente al mar Caribe ✨🌊
 
 Imagina despertar con el 🌞 de Cartagena, el sonido de las olas y la brisa marina 🌴💙. Con solo $2.000.000 🔑💰 asegura tu lote en Rivera Beach.

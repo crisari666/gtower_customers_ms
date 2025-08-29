@@ -176,7 +176,7 @@ export class WhatsappController {
         await this.aiAgentService.processCustomerMessage(whatsappNumber, messageContent);
       }
 
-      this.logger.log(`Customer message processed: ${message.id}`);
+      //this.logger.log(`Customer message processed: ${message.id}`);
     } catch (error) {
       this.logger.error('Error processing customer message:', error);
     }
@@ -211,7 +211,7 @@ export class WhatsappController {
         );
       }
       
-      this.logger.log(`Message status updated: ${status.id} -> ${status.status}`);
+      //this.logger.log(`Message status updated: ${status.id} -> ${status.status}`);
     } catch (error) {
       this.logger.error('Error processing message status:', error);
     }

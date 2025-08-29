@@ -50,6 +50,15 @@ export interface WhatsAppMessageEvent {
   timestamp: Date;
 }
 
+export interface CustomerProspectStatusEvent {
+  customerId: string;
+  isProspect: boolean;
+  prospectDate: Date;
+  prospectSource: string;
+  additionalNotes?: string;
+  timestamp: Date;
+}
+
 export interface WhatsAppWebhookEvent {
   type: 'verification' | 'message' | 'status';
   challenge?: string;
@@ -276,7 +285,27 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
     const customerRoom = WHATSAPP_ROOMS.CUSTOMER(customerId);
     this.sendToRoom(customerRoom, 'whatsappMessageStatus', statusUpdate);
     
-    this.logger.log(`WhatsApp message status update emitted: ${messageId} -> ${status}`);
+    //this.logger.log(`WhatsApp message status update emitted: ${messageId} -> ${status}`);
+  }
+
+  emitCustomerProspectStatus(event: CustomerProspectStatusEvent): void {
+    const statusUpdate = {
+      customerId: event.customerId,
+      isProspect: event.isProspect,
+      prospectDate: event.prospectDate,
+      prospectSource: event.prospectSource,
+      additionalNotes: event.additionalNotes,
+      timestamp: new Date(),
+    };
+
+    // Emit to general room
+    this.sendToRoom(WHATSAPP_ROOMS.GENERAL, 'customerProspectStatus', statusUpdate);
+
+    // Emit to specific customer room
+    const customerRoom = WHATSAPP_ROOMS.CUSTOMER(event.customerId);
+    this.sendToRoom(customerRoom, 'customerProspectStatus', statusUpdate);
+
+    this.logger.log(`Customer prospect status update emitted: ${event.customerId} -> ${event.isProspect}`);
   }
 
   getConnectedClients(): ClientInfo[] {

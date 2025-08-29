@@ -5,7 +5,8 @@ import { LangChainService } from './services/langchain.service';
 import { Customer, CustomerDocument } from '../customers/entities/customer.entity';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { AppWebSocketGateway } from '../websocket/websocket.gateway';
+import { AppWebSocketGateway, CustomerProspectStatusEvent } from '../websocket/websocket.gateway';
+import { CustomersService } from '../customers/customers.service';
 
 @Injectable()
 export class AiAgentService {
@@ -16,6 +17,7 @@ export class AiAgentService {
     private readonly whatsappService: WhatsappService,
     private readonly langChainService: LangChainService,
     private readonly webSocketGateway: AppWebSocketGateway,
+    private readonly customersService: CustomersService,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
   ) {}
 
@@ -32,30 +34,66 @@ export class AiAgentService {
 
       //console.log(JSON.stringify({conversationHistory}, null, 2));
       
+      // Check if this is the first customer response (after the initial template)
+      const messageCount = await this.conversationService.getMessageCountByConversation((conversation as any)._id.toString());
+      const isFirstCustomerResponse = messageCount === 2; // Initial template + first customer message
+
+      // Check if riviera_information_es template has already been sent in this conversation
+      const hasRivieraTemplateBeenSent = await this.conversationService.hasTemplateBeenSentInConversation(
+        (conversation as any)._id.toString(),
+        'riviera_information_es'
+      );
+
       // Analyze customer sentiment
       const sentiment = await this.langChainService.analyzeCustomerSentiment(
         messageContent,
         conversationHistory
       );
 
-      console.log(JSON.stringify({sentiment, messageContent, conversationHistory}, null, 2));
+      // console.log(JSON.stringify({sentiment, messageContent, conversationHistory}, null, 2));
       
+      // If this is the first customer response and riviera template hasn't been sent yet, send it
+      if (isFirstCustomerResponse && !hasRivieraTemplateBeenSent) {
+        try {
+          await this.whatsappService.sendTemplateMessage(
+            whatsappNumber,
+            'riviera_information_contact_es',
+            'es',
+            {
+              customerId: (conversation as any).customerId.toString(),
+              createMessageRecord: true
+            }
+          );
+          this.logger.log(`Riviera information template sent to ${whatsappNumber} after first customer response`);
+          return;
+        } catch (templateError) {
+          this.logger.error('Error sending riviera information template:', templateError);
+          // Continue with normal AI response if template fails
+        }
+      }
 
-      // Generate intelligent response using LangChain
-      const response = await this.langChainService.generateResponse(
+      // Generate intelligent response using LangChain with function calling
+      const response = await this.langChainService.generateResponseWithFunctionCalling(
         messageContent,
         conversationHistory,
         this.buildCustomerContext(conversation, sentiment),
-        'openai'
+        'openai',
+        (conversation as any).customerId.toString()
       );
 
-      //console.log(JSON.stringify({response}, null, 2));
+      console.log(JSON.stringify({response}, null, 2));
       
       if (response) {
-        // Send automated response
+        // Check if the response contains a function call
+        if (response.functionCall) {
+          console.info('functionCall', response.functionCall, "conversation", (conversation as any));
+          await this.executeFunctionCall(response.functionCall, (conversation as any).customerId.toString());
+        }
+
+        // Send automated response (only the customer-facing message)
         const whatsappResponse = await this.whatsappService.sendTextMessage(
           whatsappNumber, 
-          response, 
+          typeof response === 'string' ? response : response.customerMessage, 
           (conversation as any).customerId.toString()
         );
 
@@ -73,7 +111,7 @@ export class AiAgentService {
                  whatsappMessageId: whatsappResponse.messages[0].id,
                  senderType: 'agent' as const,
                  messageType: 'text',
-                 content: response,
+                 content: typeof response === 'string' ? response : response.customerMessage,
                  status: 'pending',
                  metadata: whatsappResponse,
                  isTemplate: false,
@@ -95,11 +133,43 @@ export class AiAgentService {
           this.logger.warn('WhatsApp response does not contain message ID, skipping WebSocket notification');
         }
         
-        this.logger.log(`AI response sent to ${whatsappNumber}: ${response}`);
+        this.logger.log(`AI response sent to ${whatsappNumber}: ${response.customerMessage || response}`);
         this.logger.log(`Customer sentiment: ${sentiment.sentiment} (confidence: ${sentiment.confidence})`);
       }
     } catch (error) {
       this.logger.error('Error processing customer message with AI:', error);
+    }
+  }
+
+  private async executeFunctionCall(functionCall: any, customerId: string): Promise<void> {
+    try {
+      if (functionCall.function === 'markCustomerAsProspect') {
+        const { prospectSource, additionalNotes } = functionCall.parameters || {};
+        
+        await this.customersService.markAsProspect(
+          customerId,
+          prospectSource || 'whatsapp_ai_conversation',
+          additionalNotes
+        );
+        
+        this.logger.log(`Customer ${customerId} marked as prospect via function call`);
+        
+        // Emit WebSocket event for prospect status change
+        try {
+          this.webSocketGateway.emitCustomerProspectStatus({
+            customerId,
+            isProspect: true,
+            prospectDate: new Date(),
+            prospectSource: prospectSource || 'whatsapp_ai_conversation',
+            additionalNotes,
+            timestamp: new Date()
+          });
+        } catch (websocketError) {
+          this.logger.error('Error emitting WebSocket event for prospect status:', websocketError);
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error executing function call:', error);
     }
   }
 

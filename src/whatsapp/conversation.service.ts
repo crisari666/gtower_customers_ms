@@ -230,4 +230,16 @@ export class ConversationService {
       .countDocuments({ conversationId })
       .exec();
   }
+
+  async hasTemplateBeenSentInConversation(conversationId: string, templateName: string): Promise<boolean> {
+    const templateMessage = await this.messageModel
+      .findOne({ 
+        conversationId, 
+        templateName, 
+        isTemplate: true 
+      })
+      .exec();
+    
+    return !!templateMessage;
+  }
 }

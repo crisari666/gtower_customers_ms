@@ -19,6 +19,15 @@ export class Customer {
 
   @Prop({ trim: true })
   address?: string;
+
+  @Prop({ default: false })
+  isProspect: boolean;
+
+  @Prop({ type: Date })
+  prospectDate?: Date;
+
+  @Prop({ type: String })
+  prospectSource?: string;
 }
 
 export const CustomerSchema = SchemaFactory.createForClass(Customer);

@@ -44,4 +44,60 @@ export class CustomersService {
       throw new NotFoundException(`Customer with ID ${id} not found`);
     }
   }
+
+  async markAsProspect(
+    customerId: string, 
+    prospectSource?: string, 
+    additionalNotes?: string
+  ): Promise<Customer> {
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException(`Customer with ID ${customerId} not found`);
+    }
+
+    const updateData: any = {
+      isProspect: true,
+      prospectDate: new Date(),
+    };
+
+    if (prospectSource) {
+      updateData.prospectSource = prospectSource;
+    }
+
+    if (additionalNotes) {
+      // Store additional notes in a separate field or extend the entity if needed
+      // For now, we'll use the existing fields
+      updateData.prospectSource = `${prospectSource || 'whatsapp'}_${additionalNotes}`;
+    }
+
+    const updatedCustomer = await this.customerModel
+      .findByIdAndUpdate(customerId, updateData, { new: true })
+      .exec();
+
+    return updatedCustomer;
+  }
+
+  async findProspects(): Promise<Customer[]> {
+    return this.customerModel.find({ isProspect: true }).exec();
+  }
+
+  async getProspectStats(): Promise<{ total: number; thisMonth: number; thisWeek: number }> {
+    const total = await this.customerModel.countDocuments({ isProspect: true });
+    
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+    
+    const thisMonth = await this.customerModel.countDocuments({
+      isProspect: true,
+      prospectDate: { $gte: startOfMonth }
+    });
+    
+    const thisWeek = await this.customerModel.countDocuments({
+      isProspect: true,
+      prospectDate: { $gte: startOfWeek }
+    });
+
+    return { total, thisMonth, thisWeek };
+  }
 }
