@@ -1,15 +1,31 @@
-import { Controller, Get, Param, Query, Delete } from '@nestjs/common';
+import { Controller, Get, Param, Query, Delete, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ChatsService } from './chats.service';
 import { PaginationDto } from '../app/shared/pagination.dto';
 import { ConversationMessagesResponseDto } from '../app/shared/conversation-messages-response.dto';
 import { ConversationListResponseDto } from '../app/shared/conversation-list-response.dto';
+import { StartConversationDto } from '../whatsapp/dto/start-conversation.dto';
 
 @ApiTags('chats')
 @Controller('chats')
 export class ChatsController {
   constructor(private readonly chatsService: ChatsService) {}
 
+  @Post('start-conversation')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Start a new conversation with a customer using WhatsApp template' })
+  @ApiResponse({ status: 200, description: 'Conversation started successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request - Invalid customer or template data' })
+  @ApiResponse({ status: 404, description: 'Customer not found' })
+  async startConversation(@Body() startConversationDto: StartConversationDto) {
+    console.info(`Starting conversation with customer: ${startConversationDto.customerId}`);
+    try {
+      const result = await this.chatsService.startConversation(startConversationDto);
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
 
   @Get()
   @ApiOperation({ summary: 'Get last conversations with pagination' })

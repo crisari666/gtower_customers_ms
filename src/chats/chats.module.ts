@@ -3,9 +3,12 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ChatsService } from './chats.service';
 import { ChatsController } from './chats.controller';
 import { ConversationService } from '../whatsapp/conversation.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { Conversation, ConversationSchema } from '../whatsapp/entities/conversation.entity';
 import { Message, MessageSchema } from '../whatsapp/entities/message.entity';
 import { Customer, CustomerSchema } from '../customers/entities/customer.entity';
+import { WebSocketService } from 'src/websocket/websocket.service';
+import { AppWebSocketGateway } from 'src/websocket/websocket.gateway';
 
 @Module({
   imports: [
@@ -16,6 +19,6 @@ import { Customer, CustomerSchema } from '../customers/entities/customer.entity'
     ]),
   ],
   controllers: [ChatsController],
-  providers: [ChatsService, ConversationService],
+  providers: [ChatsService, ConversationService, WhatsappService, WebSocketService, AppWebSocketGateway],
 })
 export class ChatsModule {}

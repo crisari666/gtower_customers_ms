@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 import { SendMessageDto } from './dto/send-message.dto';
-import { StartConversationDto } from './dto/start-conversation.dto';
+
 import { StartConversationCartagenaDto } from './dto/start_conversation.dto';
 import { WebhookDto } from './dto/webhook.dto';
 import { ConversationService } from './conversation.service';
@@ -231,18 +231,7 @@ export class WhatsappController {
     }
   }
 
-  @Post('start-conversation')
-  @HttpCode(HttpStatus.OK)
-  async startConversation(@Body() startConversationDto: StartConversationDto) {
-    console.info(`Starting conversation with customer: ${startConversationDto.customerId}`);
-    try {
-      const result = await this.whatsappService.startConversation(startConversationDto);
-      return result;
-    } catch (error) {
-      this.logger.error('Failed to start conversation', error);
-      throw error;
-    }
-  }
+
 
   @Post('send-hello-world')
   @HttpCode(HttpStatus.OK)

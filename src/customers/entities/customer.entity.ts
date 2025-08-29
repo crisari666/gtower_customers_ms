@@ -28,6 +28,12 @@ export class Customer {
 
   @Prop({ type: String })
   prospectSource?: string;
+
+  @Prop({ default: false })
+  firstMessageSent: boolean;
+  
+  @Prop({ default: false })
+  replied: boolean;
 }
 
 export const CustomerSchema = SchemaFactory.createForClass(Customer);

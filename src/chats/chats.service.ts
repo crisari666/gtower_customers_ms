@@ -2,12 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ConversationService } from '../whatsapp/conversation.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { Customer, CustomerDocument } from '../customers/entities/customer.entity';
 import { Message, MessageDocument } from '../whatsapp/entities/message.entity';
 import { Conversation, ConversationDocument } from '../whatsapp/entities/conversation.entity';
 import { PaginationDto } from '../app/shared/pagination.dto';
 import { ConversationMessagesResponseDto } from '../app/shared/conversation-messages-response.dto';
 import { ConversationListResponseDto } from '../app/shared/conversation-list-response.dto';
+import { StartConversationDto } from '../whatsapp/dto/start-conversation.dto';
 
 @Injectable()
 export class ChatsService {
@@ -16,7 +18,17 @@ export class ChatsService {
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     @InjectModel(Conversation.name) private conversationModel: Model<ConversationDocument>,
     private readonly conversationService: ConversationService,
+    private readonly whatsappService: WhatsappService,
   ) {}
+
+  async startConversation(startConversationDto: StartConversationDto): Promise<any> {
+    try {
+      const result = await this.whatsappService.startConversation(startConversationDto);
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
 
   async getCustomerConversation(customerId: string, paginationDto: PaginationDto): Promise<ConversationMessagesResponseDto> {
     // Verify customer exists
