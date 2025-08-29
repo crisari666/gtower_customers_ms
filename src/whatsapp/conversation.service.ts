@@ -168,7 +168,7 @@ export class ConversationService {
 
   async clearConversationByCustomerId(customerId: string): Promise<Conversation> {
     const conversation = await this.conversationModel.findOneAndUpdate(
-      { customerId: customerId },
+      { customerId: customerId, clearedAt: { $exists: false } },
       { 
         status: 'archived',
         lastMessageAt: new Date(),
@@ -182,6 +182,9 @@ export class ConversationService {
     }
     
     this.logger.log(`Conversation for customer ${customerId} cleared and archived`);
+
+
+
     return conversation;
   }
 

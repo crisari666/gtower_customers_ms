@@ -9,8 +9,7 @@ import { CallLogsModule } from './call_logs/call_logs.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { ChatsModule } from './chats/chats.module';
 import { WebSocketModule } from './websocket/websocket.module';
-
-
+import { SentimentModule } from './sentiment/sentiment.module';
 
 @Module({
   imports: [
@@ -24,6 +23,7 @@ import { WebSocketModule } from './websocket/websocket.module';
     WhatsappModule,
     ChatsModule,
     WebSocketModule,
+    SentimentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

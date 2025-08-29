@@ -11,11 +11,13 @@ import { AiAgentService } from './ai-agent.service';
 import { LangChainService } from './services/langchain.service';
 import { LangChainConfig } from './config/langchain.config';
 import { WebSocketModule } from '../websocket/websocket.module';
+import { SentimentModule } from '../sentiment/sentiment.module';
 
 @Module({
   imports: [
     ConfigModule,
     WebSocketModule,
+    SentimentModule,
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
       { name: Message.name, schema: MessageSchema },

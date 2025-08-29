@@ -3,13 +3,17 @@ import { LangChainConfig } from '../config/langchain.config';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 import { ConfigFileUtils } from '../../utils/config-file.utils';
+import { CustomerSentimentService } from '../../sentiment/services/customer-sentiment.service';
 
 @Injectable()
 export class LangChainService {
   private readonly logger = new Logger(LangChainService.name);
   private openaiModel: ChatOpenAI | null = null;
 
-  constructor(private readonly langChainConfig: LangChainConfig) {
+  constructor(
+    private readonly langChainConfig: LangChainConfig,
+    private readonly customerSentimentService: CustomerSentimentService
+  ) {
     this.initializeModels();
   }
 
@@ -188,35 +192,69 @@ export class LangChainService {
   async analyzeCustomerSentiment(
     message: string,
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
-  ): Promise<{ sentiment: 'positive' | 'negative' | 'neutral'; confidence: number; reasoning: string }> {
+  ): Promise<{
+    sentiment: 'positive' | 'negative' | 'neutral';
+    confidence: number;
+    reasoning: string;
+    leadQualification: {
+      urgency: 'high' | 'medium' | 'low';
+      buyingIntent: 'strong' | 'moderate' | 'weak' | 'none';
+      budgetIndication: 'high' | 'medium' | 'low' | 'unknown';
+      decisionMaker: boolean;
+      timeline: 'immediate' | 'short_term' | 'long_term' | 'unknown';
+      painPoints: string[];
+      objections: string[];
+      positiveSignals: string[];
+      riskFactors: string[];
+      nextBestAction: string;
+    };
+    customerProfile: {
+      expertise: 'beginner' | 'intermediate' | 'expert';
+      industry: string;
+      companySize: 'startup' | 'small' | 'medium' | 'large' | 'enterprise' | 'unknown';
+      role: string;
+      communicationStyle: 'formal' | 'casual' | 'technical' | 'business';
+    };
+  }> {
     try {
       if (!this.openaiModel) {
-        return {
-          sentiment: 'neutral',
-          confidence: 0.5,
-          reasoning: 'OpenAI model not configured for sentiment analysis'
-        };
+        return this.getDefaultResponse();
       }
 
       const model = this.selectModel();
       if (!model) {
-        return {
-          sentiment: 'neutral',
-          confidence: 0.5,
-          reasoning: 'OpenAI model not configured for sentiment analysis'
-        };
+        return this.getDefaultResponse();
       }
 
-      const sentimentPrompt = `Analyze the customer's sentiment in this message and conversation context. 
-Return a JSON response with:
-- sentiment: "positive", "negative", or "neutral"
-- confidence: a number between 0 and 1
-- reasoning: a brief explanation of your analysis
+      const comprehensivePrompt = `Analyze this customer interaction for comprehensive lead qualification and sales intelligence.
 
-Focus on the emotional tone and customer satisfaction indicators.`;
+Return a detailed JSON response with the following structure:
+
+LEAD QUALIFICATION:
+- sentiment: "positive", "negative", or "neutral" (based on the customer's sentiment)
+- confidence: number between 0 and 1 (based on the confidence in the sentiment)
+- urgency: "high", "medium", or "low" (based on time-sensitive language, deadlines, immediate needs)
+- buyingIntent: "strong", "moderate", "weak", or "none" (based on purchase language, questions about pricing, features)
+- budgetIndication: "high", "medium", "low", or "unknown" (based on company size, role, spending language)
+- decisionMaker: true/false (based on authority indicators, decision-making language)
+- timeline: "immediate", "short_term", "long_term", or "unknown" (based on urgency and planning language)
+- painPoints: array of specific problems or challenges mentioned
+- objections: array of concerns, hesitations, or barriers mentioned
+- positiveSignals: array of positive indicators (interest, satisfaction, agreement)
+- riskFactors: array of potential issues or red flags
+- nextBestAction: specific recommendation for next sales step
+
+CUSTOMER PROFILE:
+- expertise: "beginner", "intermediate", or "expert" (based on technical knowledge level)
+- industry: detected industry or business domain
+- companySize: "startup", "small", "medium", "large", "enterprise", or "unknown"
+- role: detected job title or role
+- communicationStyle: "formal", "casual", "technical", or "business"
+
+Focus on sales-relevant indicators, buying signals, and actionable insights for lead qualification.`;
 
       const messages = [
-        new SystemMessage(sentimentPrompt),
+        new SystemMessage(comprehensivePrompt),
         new HumanMessage(`Conversation context:\n${conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')}\n\nCurrent message: ${message}`)
       ];
 
@@ -228,24 +266,156 @@ Focus on the emotional tone and customer satisfaction indicators.`;
         return {
           sentiment: parsed.sentiment || 'neutral',
           confidence: parsed.confidence || 0.5,
-          reasoning: parsed.reasoning || 'Analysis completed'
+          reasoning: parsed.reasoning || 'Analysis completed',
+          leadQualification: {
+            urgency: parsed.leadQualification?.urgency || 'low',
+            buyingIntent: parsed.leadQualification?.buyingIntent || 'none',
+            budgetIndication: parsed.leadQualification?.budgetIndication || 'unknown',
+            decisionMaker: parsed.leadQualification?.decisionMaker || false,
+            timeline: parsed.leadQualification?.timeline || 'unknown',
+            painPoints: parsed.leadQualification?.painPoints || [],
+            objections: parsed.leadQualification?.objections || [],
+            positiveSignals: parsed.leadQualification?.positiveSignals || [],
+            riskFactors: parsed.leadQualification?.riskFactors || [],
+            nextBestAction: parsed.leadQualification?.nextBestAction || 'Continue conversation to gather more information'
+          },
+          customerProfile: {
+            expertise: parsed.customerProfile?.expertise || 'beginner',
+            industry: parsed.customerProfile?.industry || 'unknown',
+            companySize: parsed.customerProfile?.companySize || 'unknown',
+            role: parsed.customerProfile?.role || 'unknown',
+            communicationStyle: parsed.customerProfile?.communicationStyle || 'casual'
+          }
         };
       } catch (parseError) {
-        this.logger.warn('Failed to parse sentiment analysis response:', parseError);
+        this.logger.warn('Failed to parse comprehensive lead analysis response:', parseError);
+        return this.getDefaultResponse();
+      }
+    } catch (error) {
+      this.logger.error('Error analyzing customer sentiment and lead qualification:', error);
+      return this.getDefaultResponse();
+    }
+  }
+
+  async analyzeAndSaveCustomerSentiment(
+    customerId: string,
+    conversationId: string,
+    messageIndex: number,
+    message: string,
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+    conversationContext?: Record<string, any>
+  ): Promise<{
+    sentiment: 'positive' | 'negative' | 'neutral';
+    confidence: number;
+    reasoning: string;
+    leadQualification: {
+      urgency: 'high' | 'medium' | 'low';
+      buyingIntent: 'strong' | 'moderate' | 'weak' | 'none';
+      budgetIndication: 'high' | 'medium' | 'low' | 'unknown';
+      decisionMaker: boolean;
+      timeline: 'immediate' | 'short_term' | 'long_term' | 'unknown';
+      painPoints: string[];
+      objections: string[];
+      positiveSignals: string[];
+      riskFactors: string[];
+      nextBestAction: string;
+    };
+    customerProfile: {
+      expertise: 'beginner' | 'intermediate' | 'expert';
+      industry: string;
+      companySize: 'startup' | 'small' | 'medium' | 'large' | 'enterprise' | 'unknown';
+      role: string;
+      communicationStyle: 'formal' | 'casual' | 'technical' | 'business';
+    };
+    saved: boolean;
+  }> {
+    try {
+      // Analyze sentiment
+      const analysisResult = await this.analyzeCustomerSentiment(message, conversationHistory);
+      
+      // Transform the data to match the DTO structure
+      const sentimentData = {
+        sentiment: analysisResult.sentiment,
+        confidence: analysisResult.confidence,
+        reasoning: analysisResult.reasoning,
+        urgency: analysisResult.leadQualification.urgency,
+        buyingIntent: analysisResult.leadQualification.buyingIntent,
+        budgetIndication: analysisResult.leadQualification.budgetIndication,
+        decisionMaker: analysisResult.leadQualification.decisionMaker,
+        timeline: analysisResult.leadQualification.timeline,
+        painPoints: analysisResult.leadQualification.painPoints,
+        objections: analysisResult.leadQualification.objections,
+        positiveSignals: analysisResult.leadQualification.positiveSignals,
+        riskFactors: analysisResult.leadQualification.riskFactors,
+        nextBestAction: analysisResult.leadQualification.nextBestAction,
+        expertise: analysisResult.customerProfile.expertise,
+        industry: analysisResult.customerProfile.industry,
+        companySize: analysisResult.customerProfile.companySize,
+        role: analysisResult.customerProfile.role,
+        communicationStyle: analysisResult.customerProfile.communicationStyle
+      };
+
+      // Save to database
+      try {
+        await this.customerSentimentService.saveSentimentAnalysis(
+          customerId,
+          conversationId,
+          messageIndex,
+          message,
+          sentimentData,
+          conversationContext
+        );
+        
+        this.logger.log(`Sentiment analysis saved for customer ${customerId}, conversation ${conversationId}`);
+        
         return {
-          sentiment: 'neutral',
-          confidence: 0.5,
-          reasoning: 'Unable to parse sentiment analysis'
+          ...analysisResult,
+          saved: true
+        };
+      } catch (saveError) {
+        this.logger.error(`Error saving sentiment analysis for customer ${customerId}:`, saveError);
+        
+        return {
+          ...analysisResult,
+          saved: false
         };
       }
     } catch (error) {
-      this.logger.error('Error analyzing customer sentiment:', error);
+      this.logger.error(`Error in analyzeAndSaveCustomerSentiment for customer ${customerId}:`, error);
+      
+      const defaultResult = this.getDefaultResponse();
       return {
-        sentiment: 'neutral',
-        confidence: 0.5,
-        reasoning: 'Error occurred during sentiment analysis'
+        ...defaultResult,
+        saved: false
       };
     }
+  }
+
+  private getDefaultResponse() {
+    return {
+      sentiment: 'neutral' as const,
+      confidence: 0.5,
+      reasoning: 'Analysis unavailable',
+      leadQualification: {
+        urgency: 'low' as const,
+        buyingIntent: 'none' as const,
+        budgetIndication: 'unknown' as const,
+        decisionMaker: false,
+        timeline: 'unknown' as const,
+        painPoints: [],
+        objections: [],
+        positiveSignals: [],
+        riskFactors: [],
+        nextBestAction: 'Continue conversation to gather more information'
+      },
+      customerProfile: {
+        expertise: 'beginner' as const,
+        industry: 'unknown',
+        companySize: 'unknown' as const,
+        role: 'unknown',
+        communicationStyle: 'casual' as const
+      }
+    };
   }
 
   async generateFollowUpSuggestions(
