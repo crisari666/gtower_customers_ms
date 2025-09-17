@@ -3,6 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { BulkCreateCustomerDto } from './dto/bulk-create-customer.dto';
+import { BulkCreateCustomerResponseDto } from './dto/bulk-create-response.dto';
 import { Customer, CustomerDocument } from './entities/customer.entity';
 
 @Injectable()
@@ -38,11 +40,12 @@ export class CustomersService {
     return updatedCustomer;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string): Promise<boolean> {
     const result = await this.customerModel.findByIdAndDelete(id).exec();
     if (!result) {
       throw new NotFoundException(`Customer with ID ${id} not found`);
     }
+    return true;
   }
 
   async markAsProspect(
@@ -99,5 +102,95 @@ export class CustomersService {
     });
 
     return { total, thisMonth, thisWeek };
+  }
+
+  async markFirstMessageSent(customerId: string): Promise<Customer> {
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException(`Customer with ID ${customerId} not found`);
+    }
+
+    // Only update if firstMessageSent is false
+    if (!customer.firstMessageSent) {
+      const updatedCustomer = await this.customerModel
+        .findByIdAndUpdate(
+          customerId, 
+          { firstMessageSent: true }, 
+          { new: true }
+        )
+        .exec();
+      
+      return updatedCustomer;
+    }
+
+    return customer;
+  }
+
+  async markCustomerReplied(customerId: string): Promise<Customer> {
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) {
+      throw new NotFoundException(`Customer with ID ${customerId} not found`);
+    }
+
+    // Only update if replied is false
+    if (!customer.replied) {
+      const updatedCustomer = await this.customerModel
+        .findByIdAndUpdate(
+          customerId, 
+          { replied: true }, 
+          { new: true }
+        )
+        .exec();
+      
+      return updatedCustomer;
+    }
+
+    return customer;
+  }
+
+  async createBulk(bulkCreateCustomerDto: BulkCreateCustomerDto): Promise<BulkCreateCustomerResponseDto> {
+    const { customers } = bulkCreateCustomerDto;
+    const created: Customer[] = [];
+    const skipped: { phone: string; reason: string }[] = [];
+
+    for (const customerData of customers) {
+      try {
+        // Check if customer already exists by phone
+        const existingCustomer = await this.customerModel.findOne({ 
+          phone: customerData.phone 
+        }).exec();
+
+        if (existingCustomer) {
+          skipped.push({
+            phone: customerData.phone,
+            reason: 'Customer already exists with this phone number'
+          });
+          continue;
+        }
+
+        // Create new customer
+        const newCustomer = new this.customerModel({
+          name: customerData.name,
+          phone: customerData.phone,
+          address: customerData.country, // Using address field to store country
+        });
+
+        const savedCustomer = await newCustomer.save();
+        created.push(savedCustomer);
+      } catch (error) {
+        skipped.push({
+          phone: customerData.phone,
+          reason: `Error creating customer: ${error.message}`
+        });
+      }
+    }
+
+    return {
+      created,
+      skipped,
+      totalProcessed: customers.length,
+      createdCount: created.length,
+      skippedCount: skipped.length,
+    };
   }
 }

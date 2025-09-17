@@ -7,6 +7,7 @@ import { Customer, CustomerDocument } from '../customers/entities/customer.entit
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { UpdateMessageDto } from './dto/update-message.dto';
+import { CustomersService } from '../customers/customers.service';
 
 @Injectable()
 export class ConversationService {
@@ -16,6 +17,7 @@ export class ConversationService {
     @InjectModel(Conversation.name) private conversationModel: Model<ConversationDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    private readonly customersService: CustomersService,
   ) {}
 
   async createConversation(createConversationDto: CreateConversationDto): Promise<Conversation> {
@@ -68,6 +70,16 @@ export class ConversationService {
         lastMessageFrom: createMessageDto.senderType,
       }
     ).exec();
+
+    // If this is an agent message (sent TO the customer), mark firstMessageSent
+    if (createMessageDto.senderType === 'agent' && createMessageDto.customerId) {
+      try {
+        await this.customersService.markFirstMessageSent(createMessageDto.customerId);
+        this.logger.log(`Marked first message sent for customer: ${createMessageDto.customerId}`);
+      } catch (error) {
+        this.logger.error(`Error marking first message sent for customer ${createMessageDto.customerId}:`, error);
+      }
+    }
     
     return savedMessage;
   }
@@ -174,6 +186,12 @@ export class ConversationService {
         lastMessageAt: new Date(),
         clearedAt: new Date()
       },
+      { new: true }
+    ).exec();
+
+    await this.customerModel.findByIdAndUpdate(
+      customerId,
+      { replied: false, isProspect: false, firstMessageSent: false },
       { new: true }
     ).exec();
     

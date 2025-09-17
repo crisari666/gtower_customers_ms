@@ -19,7 +19,7 @@ import { WebhookDto } from './dto/webhook.dto';
 import { ConversationService } from './conversation.service';
 import { AiAgentService } from './ai-agent.service';
 import { AppWebSocketGateway, WhatsAppWebhookEvent } from '../websocket/websocket.gateway';
-import { WebSocketService } from '../websocket/websocket.service';
+import { CustomersService } from '../customers/customers.service';
 
 @Controller('whatsapp')
 export class WhatsappController {
@@ -30,7 +30,7 @@ export class WhatsappController {
     private readonly conversationService: ConversationService,
     private readonly aiAgentService: AiAgentService,
     private readonly webSocketGateway: AppWebSocketGateway,
-    private readonly webSocketService: WebSocketService,
+    private readonly customersService: CustomersService,
   ) {}
 
   @Get('webhook')
@@ -147,6 +147,13 @@ export class WhatsappController {
         status: 'delivered',
         metadata: { message, metadata, customerData },
       });
+
+      // Mark customer as replied if this is their first reply
+      try {
+        await this.customersService.markCustomerReplied((conversation as any).customerId.toString());
+      } catch (error) {
+        this.logger.error(`Error marking customer as replied: ${(conversation as any).customerId.toString()}`, error);
+      }
 
       // Log customer information if available
       if (customerData?.profile?.name) {

@@ -4,6 +4,8 @@ import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerResponseDto } from './dto/customer-response.dto';
+import { BulkCreateCustomerDto } from './dto/bulk-create-customer.dto';
+import { BulkCreateCustomerResponseDto } from './dto/bulk-create-response.dto';
 import { Customer } from './entities/customer.entity';
 
 @ApiTags('customers')
@@ -16,6 +18,17 @@ export class CustomersController {
   @ApiResponse({ status: 201, description: 'Customer created successfully', type: CustomerResponseDto })
   async create(@Body() createCustomerDto: CreateCustomerDto): Promise<Customer> {
     return this.customersService.create(createCustomerDto);
+  }
+
+  @Post('bulk')
+  @ApiOperation({ summary: 'Create multiple customers' })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Bulk customer creation completed', 
+    type: BulkCreateCustomerResponseDto 
+  })
+  async createBulk(@Body() bulkCreateCustomerDto: BulkCreateCustomerDto): Promise<BulkCreateCustomerResponseDto> {
+    return this.customersService.createBulk(bulkCreateCustomerDto);
   }
 
   @Get()
@@ -45,7 +58,7 @@ export class CustomersController {
   @ApiOperation({ summary: 'Delete customer by ID' })
   @ApiResponse({ status: 200, description: 'Customer deleted successfully' })
   @ApiResponse({ status: 404, description: 'Customer not found' })
-  async remove(@Param('id') id: string): Promise<void> {
+  async remove(@Param('id') id: string): Promise<any> {
     return this.customersService.remove(id);
   }
 }

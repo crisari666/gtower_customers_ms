@@ -9,6 +9,7 @@ import { Message, MessageSchema } from '../whatsapp/entities/message.entity';
 import { Customer, CustomerSchema } from '../customers/entities/customer.entity';
 import { WebSocketService } from 'src/websocket/websocket.service';
 import { AppWebSocketGateway } from 'src/websocket/websocket.gateway';
+import { CustomersService } from '../customers/customers.service';
 
 @Module({
   imports: [
@@ -19,6 +20,6 @@ import { AppWebSocketGateway } from 'src/websocket/websocket.gateway';
     ]),
   ],
   controllers: [ChatsController],
-  providers: [ChatsService, ConversationService, WhatsappService, WebSocketService, AppWebSocketGateway],
+  providers: [ChatsService, ConversationService, WhatsappService, WebSocketService, AppWebSocketGateway, CustomersService],
 })
 export class ChatsModule {}

@@ -10,6 +10,7 @@ import { PaginationDto } from '../app/shared/pagination.dto';
 import { ConversationMessagesResponseDto } from '../app/shared/conversation-messages-response.dto';
 import { ConversationListResponseDto } from '../app/shared/conversation-list-response.dto';
 import { StartConversationDto } from '../whatsapp/dto/start-conversation.dto';
+import { CustomersService } from '../customers/customers.service';
 
 @Injectable()
 export class ChatsService {
@@ -19,6 +20,7 @@ export class ChatsService {
     @InjectModel(Conversation.name) private conversationModel: Model<ConversationDocument>,
     private readonly conversationService: ConversationService,
     private readonly whatsappService: WhatsappService,
+    private readonly customersService: CustomersService,
   ) {}
 
   async startConversation(startConversationDto: StartConversationDto): Promise<any> {
