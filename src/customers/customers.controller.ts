@@ -58,7 +58,7 @@ export class CustomersController {
   @ApiOperation({ summary: 'Delete customer by ID' })
   @ApiResponse({ status: 200, description: 'Customer deleted successfully' })
   @ApiResponse({ status: 404, description: 'Customer not found' })
-  async remove(@Param('id') id: string): Promise<any> {
+  async remove(@Param('id') id: string): Promise<boolean> {
     return this.customersService.remove(id);
   }
 }

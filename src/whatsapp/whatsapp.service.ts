@@ -8,27 +8,32 @@ import axios, { AxiosResponse } from 'axios';
 import { templates } from './config/templates';
 import { WebSocketService } from '../websocket/websocket.service';
 
-const accountProd = "746024655261570";
-const accountTest = "790847484102390";
-
-const pathMessage = `v23.0/${accountTest}/messages`
 
 const urlBaseWsBusinessFb = "https://graph.facebook.com/";
 
 @Injectable()
 export class WhatsappService {
-  private readonly logger = new Logger(WhatsappService.name);
+  private accountProd = process.env.WS_ACCOUNT_PROD;
+  private accountTest = process.env.WS_ACCOUNT_TEST;
+  
+  private pathMessage = `v23.0/${process.env.IS_DEV === 'true' ? this.accountTest : this.accountProd}/messages`
 
+  
+  
+  private readonly logger = new Logger(WhatsappService.name);
   readonly headers = {
     "Content-type": "application/json",
     "Authorization": `Bearer ${process.env.WHATSAPP_TOKEN}`,
   }
-
+  
   constructor(
     private readonly conversationService: ConversationService,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     private readonly webSocketService: WebSocketService,
-  ) {}
+  ) {
+    console.log({accountProd: this.accountProd, accountTest: this.accountTest, pathMessage: this.pathMessage});
+
+  }
 
   async startConversation(startConversationDto: StartConversationDto): Promise<any> {
     try {
@@ -110,7 +115,7 @@ export class WhatsappService {
 
       return { success: true, data: response, conversationId: (conversation as any)._id };
     } catch (error) {
-      this.logger.error('Error starting conversation:', error);
+      //this.logger.error('Error starting conversation:', error);
       throw error;
     }
   }
@@ -137,7 +142,7 @@ export class WhatsappService {
       };
 
       const responseMsg: AxiosResponse = await axios.post(
-        `${urlBaseWsBusinessFb}${pathMessage}`,
+        `${urlBaseWsBusinessFb}${this.pathMessage}`,
         data,
         { headers: this.headers }
       );
@@ -183,7 +188,7 @@ export class WhatsappService {
       };
 
       const responseMsg: AxiosResponse = await axios.post(
-        `${urlBaseWsBusinessFb}${pathMessage}`,
+        `${urlBaseWsBusinessFb}${this.pathMessage}`,
         data,
         { headers: this.headers }
       );
@@ -216,7 +221,7 @@ export class WhatsappService {
   async sendHelloWorld(): Promise<any> {
     try {
       const responseMsg: AxiosResponse = await axios.post(
-        `${urlBaseWsBusinessFb}${pathMessage}`,
+        `${urlBaseWsBusinessFb}${this.pathMessage}`,
         {
           "messaging_product": "whatsapp",
           "to": "573108834323",
@@ -292,9 +297,9 @@ export class WhatsappService {
 
   async msgTemplate(messageTemplate: any):Promise<any> {
     try {
-      
+      console.log({pathMessage: this.pathMessage});
       const responseMsg: AxiosResponse = await axios.post(
-        `${urlBaseWsBusinessFb}${pathMessage}`,
+        `${urlBaseWsBusinessFb}${this.pathMessage}`,
         messageTemplate,
         {headers: this.headers}
         )
@@ -302,7 +307,7 @@ export class WhatsappService {
     } catch (error) {
       console.error('Error on WsBusiness.sendTicketMsg');
       // console.error({error});
-      console.error({error:  JSON.stringify( (error as any).response.data)});
+      //console.error({error:  JSON.stringify( (error as any).response.data)});
       throw error
      
     }

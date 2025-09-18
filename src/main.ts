@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
+import { json } from 'express';
 
 async function bootstrap() {
   const databaseName = process.env.DATABASE_NAME;
@@ -14,6 +15,9 @@ async function bootstrap() {
   console.log({ databaseName, dataBasePass, dataBaseUser, HOST, PORT, port });
 
   const app = await NestFactory.create(AppModule);
+
+  // Configure body parser with 10mb limit
+  app.use(json({ limit: '10mb' }));
 
   // Global validation pipe
   app.useGlobalPipes(new ValidationPipe({

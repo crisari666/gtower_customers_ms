@@ -238,8 +238,6 @@ export class WhatsappController {
     }
   }
 
-
-
   @Post('send-hello-world')
   @HttpCode(HttpStatus.OK)
   async sendHelloWorld() {

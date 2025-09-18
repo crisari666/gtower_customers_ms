@@ -142,7 +142,7 @@ export class ConversationService {
   async findOrCreateConversation(customerId: string, whatsappNumber: string): Promise<Conversation> {
     let conversation = await this.findConversationByCustomer(customerId);
 
-    console.log({conversation});
+    //console.log({conversation});
     
     // Only consider active conversations
     if (conversation && conversation.status !== 'active') {

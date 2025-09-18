@@ -84,7 +84,7 @@ export class AiAgentService {
         'openai'
       );
 
-      console.log(JSON.stringify({response}, null, 2));
+      //console.log(JSON.stringify({response}, null, 2));
       
       if (response) {
         // Check if the response contains a function call
