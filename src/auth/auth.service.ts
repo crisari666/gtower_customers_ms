@@ -59,4 +59,16 @@ export class AuthService {
       },
     };
   }
+
+  async getCurrentUser(user: any): Promise<any> {
+    if (!user) {
+      throw new UnauthorizedException('User not authenticated');
+    }
+
+    return {
+      id: user.id,
+      username: user.username,
+      enabled: user.enabled,
+    };
+  }
 }

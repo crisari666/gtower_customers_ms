@@ -11,10 +11,10 @@ export class JwtMiddleware implements NestMiddleware {
   ) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
-    // Skip authentication for auth endpoints
-    const path = req.baseUrl;
+    // Skip authentication for auth endpoints except /me
+    const path = req.baseUrl + req.path;
     console.log({req});
-    if (path.includes('/auth')) {
+    if (path.includes('/auth') && !path.includes('/auth/me')) {
       return next();
     }
 
