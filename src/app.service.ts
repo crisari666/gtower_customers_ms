@@ -11,7 +11,7 @@ export class AppService {
   ) {}
 
   getHello(): string {
-    return `Hello World! Running in ${this.appConfigService.nodeEnv} mode on port ${this.appConfigService.port}`;
+    return `Hello World GTower Customer MS agent`;
   }
 
   getConfigInfo(): object {
