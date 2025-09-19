@@ -11,6 +11,7 @@ import { ChatsModule } from './chats/chats.module';
 import { WebSocketModule } from './websocket/websocket.module';
 import { SentimentModule } from './sentiment/sentiment.module';
 import { ProspectModule } from './prospect/prospect.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ProspectModule } from './prospect/prospect.module';
     WebSocketModule,
     SentimentModule,
     ProspectModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
