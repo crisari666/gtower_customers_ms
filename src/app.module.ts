@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AppConfigModule } from './config/config.module';
@@ -12,6 +12,8 @@ import { WebSocketModule } from './websocket/websocket.module';
 import { SentimentModule } from './sentiment/sentiment.module';
 import { ProspectModule } from './prospect/prospect.module';
 import { UsersModule } from './users/users.module';
+import { AuthModule } from './auth/auth.module';
+import { JwtMiddleware } from './auth/middleware/jwt.middleware';
 
 @Module({
   imports: [
@@ -28,8 +30,15 @@ import { UsersModule } from './users/users.module';
     SentimentModule,
     ProspectModule,
     UsersModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(JwtMiddleware)
+      .forRoutes('*');
+  }
+}
