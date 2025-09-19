@@ -34,6 +34,10 @@ export class AppConfigService {
     return this.configService.get<string>('security.jwtExpiresIn', { infer: true });
   }
 
+  get hashKey(): string {
+    return this.configService.get<string>('security.hashKey', { infer: true });
+  }
+
   get elevenLabsApiKey(): string {
     return this.configService.get<string>('externalServices.elevenLabsApiKey', { infer: true });
   }

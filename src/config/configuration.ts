@@ -10,6 +10,7 @@ export interface ApiConfig {
 export interface SecurityConfig {
   jwtSecret: string;
   jwtExpiresIn: string;
+  hashKey: string;
 }
 
 export interface ExternalServicesConfig {
@@ -44,6 +45,7 @@ export default (): AppConfig => ({
   security: {
     jwtSecret: process.env.JWT_SECRET || 'your-super-secret-jwt-key',
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
+    hashKey: process.env.HASH_KEY || 'your-default-hash-key',
   },
   externalServices: {
     elevenLabsApiKey: process.env.ELEVENLABS_API_KEY || '',
